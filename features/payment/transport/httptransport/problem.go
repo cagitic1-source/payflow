@@ -1,0 +1,124 @@
+package httptransport
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"go.uber.org/zap"
+
+	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+)
+
+// problem — тело ответа об ошибке по RFC 9457.
+type problem struct {
+	Type      string `json:"type"`
+	Title     string `json:"title"`
+	Status    int    `json:"status"`
+	Detail    string `json:"detail"`
+	Instance  string `json:"instance,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Field     string `json:"field,omitempty"`
+}
+
+// problemSpec — одна строка таблицы «ошибка → ответ клиенту».
+type problemSpec struct {
+	err    error
+	status int
+	slug   string // последняя часть type URI
+	title  string
+	detail string
+	field  string
+}
+
+const problemTypeBase = "https://payflow.dev/problems/"
+
+var problemSpecs = []problemSpec{
+	// --- 422: конкретные ошибки валидации ---
+	{
+		err: paymenterrors.ErrEmptyMerchantID, status: http.StatusUnprocessableEntity,
+		slug: "empty-merchant-id", title: "Empty merchant id",
+		detail: "merchant_id must be provided", field: "merchant_id",
+	},
+	{
+		err: paymenterrors.ErrInvalidAmount, status: http.StatusUnprocessableEntity,
+		slug: "invalid-amount", title: "Invalid amount",
+		detail: "amount_minor must be positive", field: "amount_minor",
+	},
+	{
+		err: paymenterrors.ErrEmptyCurrency, status: http.StatusUnprocessableEntity,
+		slug: "empty-currency", title: "Empty currency",
+		detail: "currency must be provided", field: "currency",
+	},
+	{
+		err: paymenterrors.ErrUnsupportedCurrency, status: http.StatusUnprocessableEntity,
+		slug: "unsupported-currency", title: "Unsupported currency",
+		detail: "currency must be one of: RUB, USD, EUR", field: "currency",
+	},
+	{
+		err: paymenterrors.ErrEmptyPaymentID, status: http.StatusUnprocessableEntity,
+		slug: "empty-payment-id", title: "Empty payment id",
+		detail: "payment id must be provided",
+	},
+
+	// --- 404 ---
+	{
+		err: paymenterrors.ErrNotFound, status: http.StatusNotFound,
+		slug: "payment-not-found", title: "Payment not found",
+		detail: "payment with the given id does not exist",
+	},
+	// --- 400 ---
+	{
+		err: ErrMalformedRequest, status: http.StatusBadRequest,
+		slug: "malformed-request", title: "Malformed request",
+		detail: "request body is not valid JSON or contains unknown fields",
+	},
+
+	// --- 422: страховка для ошибок валидации без своей строки. ВСЕГДА ПОСЛЕДНЯЯ ---
+	{
+		err: paymenterrors.ErrValidation, status: http.StatusUnprocessableEntity,
+		slug: "validation-error", title: "Validation error",
+		detail: "request validation failed",
+	},
+}
+
+func problemFromError(err error) problem {
+	for _, spec := range problemSpecs {
+		if errors.Is(err, spec.err) {
+			return problem{
+				Type:   problemTypeBase + spec.slug,
+				Title:  spec.title,
+				Status: spec.status,
+				Detail: spec.detail,
+				Field:  spec.field,
+			}
+		}
+	}
+
+	return problem{
+		Type:   "about:blank",
+		Title:  http.StatusText(http.StatusInternalServerError),
+		Status: http.StatusInternalServerError,
+		Detail: "internal error",
+	}
+}
+
+func respondError(w http.ResponseWriter, r *http.Request, log *zap.Logger, err error) {
+	p := problemFromError(err)
+	p.Instance = r.URL.Path
+
+	if p.Status >= http.StatusInternalServerError {
+		log.Error("request failed",
+			zap.String("method", r.Method),
+			zap.String("url", r.URL.String()),
+			zap.Int("status", p.Status),
+			zap.Error(err))
+	}
+
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(p.Status)
+
+	if encErr := json.NewEncoder(w).Encode(p); encErr != nil {
+		log.Debug("write problem response", zap.Error(encErr))
+	}
+}
