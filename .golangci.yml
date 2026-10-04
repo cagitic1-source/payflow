@@ -1,0 +1,48 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - revive
+    - bodyclose
+    - noctx
+    - gosec
+    - misspell
+    - unconvert
+    - nolintlint
+  settings:
+    errcheck:
+      check-type-assertions: true
+    revive:
+      rules:
+        - name: unused-receiver
+        - name: unused-parameter
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+        - name: indent-error-flow
+        - name: early-return
+        - name: context-as-argument
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/cagitic1-source/payflow
