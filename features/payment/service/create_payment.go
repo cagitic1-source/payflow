@@ -3,33 +3,59 @@ package service
 import (
 	"context"
 	"fmt"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
+	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 )
 
-// CreatePayment создаёт платёж с новым id (UUIDv7) и сохраняет его.
-// Ошибки валидации оборачивают paymenterrors.ErrValidation.
-func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCommand) (paymentdomain.Payment, error) {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return paymentdomain.Payment{}, fmt.Errorf("generate payment id: %w", err)
+// CreatePayment создаёт платёж ровно один раз для каждого ключа идемпотентности.
+// Повтор с тем же ключом и тем же содержимым возвращает ранее созданный платёж.
+func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCommand) (CreatePaymentResult, error) {
+	if cmd.IdempotencyKey == "" {
+		return CreatePaymentResult{}, paymenterrors.ErrEmptyIdempotencyKey
 	}
 
-	p, err := paymentdomain.NewPayment(
-		id.String(),
-		cmd.MerchantID,
-		cmd.AmountMinor,
-		cmd.Currency,
-	)
-	if err != nil {
-		return paymentdomain.Payment{}, err
+	key := IdempotencyKey{
+		MerchantID: cmd.MerchantID,
+		Key:        cmd.IdempotencyKey,
 	}
+
+	id := uuid.NewV7()
+	p, err := paymentdomain.NewPayment(id.String(), cmd.MerchantID, cmd.AmountMinor, cmd.Currency)
+	if err != nil {
+		return CreatePaymentResult{}, err
+	}
+
+	existingID, err := s.idempotency.Reserve(ctx, key, fingerprint(cmd))
+	if err != nil {
+		// Конфликт или повторное использование ключа — создавать нельзя.
+		return CreatePaymentResult{}, fmt.Errorf("reserve idempotency key: %w", err)
+	}
+	if existingID != "" {
+		existing, err := s.payments.Get(ctx, existingID)
+		if err != nil {
+			return CreatePaymentResult{}, fmt.Errorf("get replayed payment: %w", err)
+		}
+		return CreatePaymentResult{Payment: existing, Replayed: true}, nil
+	}
+
+	saved := false
+	defer func() {
+		if !saved {
+			_ = s.idempotency.Release(context.WithoutCancel(ctx), key)
+		}
+	}()
 
 	if err := s.payments.Save(ctx, p); err != nil {
-		return paymentdomain.Payment{}, fmt.Errorf("save payment: %w", err)
+		return CreatePaymentResult{}, fmt.Errorf("save payment: %w", err)
 	}
+	saved = true
 
-	return p, nil
+	if err := s.idempotency.Complete(ctx, key, p.ID); err != nil {
+		return CreatePaymentResult{}, fmt.Errorf("complete payment: %w", err)
+	}
+	return CreatePaymentResult{
+		Payment: p,
+	}, nil
 }

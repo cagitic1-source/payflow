@@ -13,9 +13,9 @@ type fakePaymentService struct {
 	createCalls int
 }
 
-func (s *fakePaymentService) CreatePayment(_ context.Context, _ service.CreatePaymentCommand) (paymentdomain.Payment, error) {
+func (s *fakePaymentService) CreatePayment(_ context.Context, _ service.CreatePaymentCommand) (service.CreatePaymentResult, error) {
 	s.createCalls++
-	return s.payment, s.err
+	return service.CreatePaymentResult{Payment: s.payment}, s.err
 }
 
 func (s *fakePaymentService) GetPayment(_ context.Context, _ string) (paymentdomain.Payment, error) {

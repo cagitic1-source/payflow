@@ -60,6 +60,18 @@ var problemSpecs = []problemSpec{
 		slug: "empty-payment-id", title: "Empty payment id",
 		detail: "payment id must be provided",
 	},
+	{
+		err: paymenterrors.ErrIdempotencyKeyReused, status: http.StatusUnprocessableEntity,
+		slug: "idempotency-key-reused", title: "Idempotency key reused",
+		detail: "Idempotency-Key was already used with a different request body",
+	},
+
+	// --- 409 ---
+	{
+		err: paymenterrors.ErrIdempotencyInProgress, status: http.StatusConflict,
+		slug: "idempotency-request-in-progress", title: "Request in progress",
+		detail: "a request with this Idempotency-Key is still being processed, retry later",
+	},
 
 	// --- 404 ---
 	{
@@ -72,6 +84,12 @@ var problemSpecs = []problemSpec{
 		err: ErrMalformedRequest, status: http.StatusBadRequest,
 		slug: "malformed-request", title: "Malformed request",
 		detail: "request body is not valid JSON or contains unknown fields",
+	},
+	// ErrEmptyIdempotencyKey оборачивает ErrValidation, поэтому стоит выше страховки.
+	{
+		err: paymenterrors.ErrEmptyIdempotencyKey, status: http.StatusBadRequest,
+		slug: "missing-idempotency-key", title: "Missing idempotency key",
+		detail: "Idempotency-Key header must be provided",
 	},
 
 	// --- 422: страховка для ошибок валидации без своей строки. ВСЕГДА ПОСЛЕДНЯЯ ---

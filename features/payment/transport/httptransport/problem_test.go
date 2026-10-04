@@ -26,6 +26,9 @@ func TestProblemFromError(t *testing.T) {
 		{"empty payment id", paymenterrors.ErrEmptyPaymentID, http.StatusUnprocessableEntity, problemTypeBase + "empty-payment-id", ""},
 		{"not found", paymenterrors.ErrNotFound, http.StatusNotFound, problemTypeBase + "payment-not-found", ""},
 		{"malformed request", fmt.Errorf("%w: unexpected EOF", ErrMalformedRequest), http.StatusBadRequest, problemTypeBase + "malformed-request", ""},
+		{"missing idempotency key", paymenterrors.ErrEmptyIdempotencyKey, http.StatusBadRequest, problemTypeBase + "missing-idempotency-key", ""},
+		{"idempotency key reused", paymenterrors.ErrIdempotencyKeyReused, http.StatusUnprocessableEntity, problemTypeBase + "idempotency-key-reused", ""},
+		{"idempotency in progress", fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyInProgress), http.StatusConflict, problemTypeBase + "idempotency-request-in-progress", ""},
 
 		// --- поведение маппинга ---
 		{"wrapped error is found", fmt.Errorf("get payment: %w", paymenterrors.ErrNotFound), http.StatusNotFound, problemTypeBase + "payment-not-found", ""},
