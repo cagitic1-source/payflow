@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
@@ -53,8 +53,9 @@ func TestRequestID(t *testing.T) {
 				t.Errorf("valid id must pass through: got %q, want %q", got, tt.header)
 			}
 			if !tt.wantPassed {
+				// Версия UUID - старшие 4 бита байта 6.
 				id, err := uuid.Parse(got)
-				if err != nil || id.Version() != 7 {
+				if err != nil || id[6]>>4 != 7 {
 					t.Errorf("want generated UUIDv7, got %q", got)
 				}
 			}
