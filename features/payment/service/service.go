@@ -6,30 +6,32 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 )
 
 // PaymentService реализует сценарии работы с платежами: создание и получение.
-// Не знает ни про HTTP, ни про конкретное хранилище — работает через PaymentRepository.
+// Не знает ни про HTTP, ни про конкретное хранилище - работает через PaymentRepository.
 type PaymentService struct {
 	payments    PaymentRepository
 	idempotency IdempotencyStore
+	now         func() time.Time // в тестах подменяется
 }
 
-// IdempotencyKey — ключ идемпотентности в области одного мерчанта.
+// IdempotencyKey - ключ идемпотентности в области одного мерчанта.
 type IdempotencyKey struct {
 	MerchantID string
 	Key        string
 }
 
-// CreatePaymentResult — результат создания платежа.
+// CreatePaymentResult - результат создания платежа.
 type CreatePaymentResult struct {
 	Payment  paymentdomain.Payment
-	Replayed bool // true — платёж создан раньше, это повтор
+	Replayed bool // true - платёж создан раньше, это повтор
 }
 
-// CreatePaymentCommand — входные данные для создания платежа.
+// CreatePaymentCommand - входные данные для создания платежа.
 // Проверяются в paymentdomain.NewPayment, а не здесь.
 type CreatePaymentCommand struct {
 	MerchantID     string
@@ -38,7 +40,7 @@ type CreatePaymentCommand struct {
 	IdempotencyKey string
 }
 
-// PaymentRepository — хранилище платежей, которое нужно сервису.
+// PaymentRepository - хранилище платежей, которое нужно сервису.
 // Если платежа нет, Get возвращает ошибку, оборачивающую paymenterrors.ErrNotFound.
 type PaymentRepository interface {
 	Save(ctx context.Context, p paymentdomain.Payment) error
@@ -49,8 +51,8 @@ type PaymentRepository interface {
 type IdempotencyStore interface {
 	// Reserve атомарно занимает ключ. Если операция с этим ключом уже завершена
 	// с тем же отпечатком, возвращает id созданного тогда платежа. Если она ещё
-	// выполняется — paymenterrors.ErrIdempotencyInProgress, если отпечаток
-	// другой — paymenterrors.ErrIdempotencyKeyReused.
+	// выполняется - paymenterrors.ErrIdempotencyInProgress, если отпечаток
+	// другой - paymenterrors.ErrIdempotencyKeyReused.
 	Reserve(ctx context.Context, key IdempotencyKey, fingerprint string) (paymentID string, err error)
 	// Complete помечает операцию завершённой и запоминает её результат.
 	Complete(ctx context.Context, key IdempotencyKey, paymentID string) error
@@ -64,10 +66,11 @@ func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore)
 	return &PaymentService{
 		payments:    payments,
 		idempotency: idempotency,
+		now:         time.Now,
 	}
 }
 
-// fingerprint — отпечаток бизнес-содержимого запроса.
+// fingerprint - отпечаток бизнес-содержимого запроса.
 func fingerprint(cmd CreatePaymentCommand) string {
 	b, _ := json.Marshal(struct {
 		MerchantID  string `json:"merchant_id"`

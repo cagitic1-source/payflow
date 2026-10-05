@@ -4,14 +4,14 @@ package middleware
 import (
 	"net/http"
 	"regexp"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
-// RequestIDHeader — заголовок, в котором id запроса приходит от клиента
+// RequestIDHeader - заголовок, в котором id запроса приходит от клиента
 // и возвращается в ответе.
 const RequestIDHeader = "X-Request-ID"
 
@@ -29,7 +29,7 @@ func RequestID(log *zap.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(RequestIDHeader)
 		if !validRequestID.MatchString(id) {
-			id = newRequestID()
+			id = uuid.NewV7().String()
 		}
 
 		w.Header().Set(RequestIDHeader, id)
@@ -37,12 +37,4 @@ func RequestID(log *zap.Logger, next http.Handler) http.Handler {
 		ctx = requestctx.WithLogger(ctx, log.With(zap.String("request_id", id)))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func newRequestID() string {
-	id, err := uuid.NewV7()
-	if err != nil {
-		return uuid.NewString()
-	}
-	return id.String()
 }

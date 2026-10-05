@@ -19,10 +19,24 @@ var (
 )
 
 var (
-	// ErrIdempotencyKeyReused — ключ уже использован для другого запроса.
+	// ErrIdempotencyKeyReused - ключ уже использован для другого запроса.
 	ErrIdempotencyKeyReused = errors.New("idempotency key reused with different request")
-	// ErrIdempotencyInProgress — запрос с этим ключом ещё выполняется.
+	// ErrIdempotencyInProgress - запрос с этим ключом ещё выполняется.
 	ErrIdempotencyInProgress = errors.New("request with this idempotency key is in progress")
-	// ErrEmptyIdempotencyKey — запрос пришёл без ключа идемпотентности.
+	// ErrEmptyIdempotencyKey - запрос пришёл без ключа идемпотентности.
 	ErrEmptyIdempotencyKey = fmt.Errorf("%w: idempotency key is empty", ErrValidation)
+)
+
+var (
+	// ErrOverloaded - система не может принять платёж прямо сейчас.
+	ErrOverloaded = errors.New("service is overloaded")
+)
+
+// Ошибки смены статуса платежа. Это не ошибки входных данных,
+// поэтому ErrValidation они не оборачивают.
+var (
+	// ErrInvalidTransition - недопустимая смена статуса платежа.
+	ErrInvalidTransition = errors.New("invalid payment status transition")
+	// ErrEmptyFailureReason - отказ или ошибка без причины.
+	ErrEmptyFailureReason = errors.New("failure reason is empty")
 )

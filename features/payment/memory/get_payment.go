@@ -9,7 +9,7 @@ import (
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 )
 
-// Get возвращает платёж по id. Если его нет — ошибку, оборачивающую
+// Get возвращает платёж по id. Если его нет - ошибку, оборачивающую
 // paymenterrors.ErrNotFound.
 func (r *PaymentRepository) Get(_ context.Context, id string) (paymentdomain.Payment, error) {
 	r.mu.RLock()

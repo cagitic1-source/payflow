@@ -42,7 +42,7 @@ func TestCreatePayment_Replay(t *testing.T) {
 	if first.Replayed {
 		t.Fatal("first create must not be marked as replayed")
 	}
-	// После успешного Save флаг saved выставлен — освобождать ключ нельзя.
+	// После успешного Save флаг saved выставлен - освобождать ключ нельзя.
 	if idem.releaseCalls != 0 {
 		t.Fatalf("successful create must not release the key, got %d Release calls", idem.releaseCalls)
 	}
@@ -90,7 +90,7 @@ func TestCreatePayment_KeysScopedByMerchant(t *testing.T) {
 		t.Fatalf("create for merchant1: %v", err)
 	}
 
-	// Тот же ключ у другого мерчанта — это другой запрос, а не повтор.
+	// Тот же ключ у другого мерчанта - это другой запрос, а не повтор.
 	cmd := validPaymentCommand()
 	cmd.MerchantID = "merchant2"
 	p2, err := svc.CreatePayment(t.Context(), cmd)
@@ -132,7 +132,7 @@ func TestCreatePayment_ReserveError(t *testing.T) {
 	if len(repo.saved) != 0 {
 		t.Fatalf("want nothing saved, got %d payments", len(repo.saved))
 	}
-	// Ключ занят другим запросом — освобождать его нельзя.
+	// Ключ занят другим запросом - освобождать его нельзя.
 	if idem.releaseCalls != 0 {
 		t.Fatalf("want no Release for a key we did not reserve, got %d calls", idem.releaseCalls)
 	}

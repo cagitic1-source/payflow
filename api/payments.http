@@ -6,7 +6,7 @@ Content-Type: application/json
 
 {"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}
 
-### Создать платёж → 201
+### Создать платёж → 202
 # @name create
 POST {{baseUrl}}/v1/payments
 Content-Type: application/json
@@ -14,7 +14,7 @@ Idempotency-Key: k1
 
 {"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}
 
-### Повтор с тем же ключом → 201, тот же id, Idempotent-Replayed: true
+### Повтор с тем же ключом → 202, тот же id, Idempotent-Replayed: true
 POST {{baseUrl}}/v1/payments
 Content-Type: application/json
 Idempotency-Key: k1

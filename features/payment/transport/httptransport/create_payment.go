@@ -10,11 +10,11 @@ import (
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 )
 
-// CreatePayment обрабатывает POST /v1/payments: создаёт платёж и отвечает 201
-// с телом платежа и заголовком Location. Невалидное тело или нет заголовка
-// Idempotency-Key — 400, ошибки валидации — 422. Повтор с тем же ключом
+// CreatePayment обрабатывает POST /v1/payments: создаёт платёж и отвечает 202
+// с телом платежа и заголовком Location. Невалидное тело, тело больше
+// maxRequestBodyBytes или нет заголовка Idempotency-Key - 400, ошибки валидации - 422. Повтор с тем же ключом
 // и телом получает тот же ответ с заголовком Idempotent-Replayed: true;
-// пока первый запрос выполняется — 409, ключ с другим телом — 422.
+// пока первый запрос выполняется - 409, ключ с другим телом - 422.
 func (h *PaymentHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get(idempotencyKeyHeader)
 	if key == "" || len(key) > 255 {
@@ -24,6 +24,7 @@ func (h *PaymentHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 
 	var req createPaymentRequest
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&req); err != nil {
@@ -47,5 +48,5 @@ func (h *PaymentHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(IdempotentReplayedHeader, "true")
 	}
 	w.Header().Set("Location", "/v1/payments/"+res.Payment.ID)
-	writeJSON(w, h.log, http.StatusCreated, toPaymentResponse(res.Payment))
+	writeJSON(w, h.log, http.StatusAccepted, toPaymentResponse(res.Payment))
 }

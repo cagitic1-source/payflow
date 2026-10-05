@@ -29,12 +29,17 @@ func newRouter() http.Handler {
 }
 
 func TestAPI(t *testing.T) {
+	created := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+
 	stored := paymentdomain.Payment{
-		ID:          "pay-1",
-		MerchantID:  "m-1",
-		AmountMinor: 100,
-		Currency:    "RUB",
+		ID: "pay-1", MerchantID: "m-1", AmountMinor: 100, Currency: "RUB",
+		Status: paymentdomain.StatusPending, CreatedAt: created, UpdatedAt: created,
 	}
+
+	declined := stored
+	declined.Status = paymentdomain.StatusDeclined
+	declined.FailureReason = "insufficient_funds"
+
 	validBody := `{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`
 	withKey := map[string]string{"Idempotency-Key": "key-1"}
 
@@ -52,18 +57,37 @@ func TestAPI(t *testing.T) {
 		wantStatus      int
 		wantType        string // для ответов-ошибок: последняя часть type или "about:blank"
 		wantLocation    string
-		wantReplayed    bool // ждём заголовок Idempotent-Replayed: true
-		wantServiceCall bool // должен ли запрос дойти до сервиса
+		wantReplayed    bool   // ждём заголовок Idempotent-Replayed: true
+		wantRetryAfter  string // ждём заголовок Retry-After с этим значением
+		wantBody        string // для успешных ответов: ожидаемые status и failure_reason через "/"
+		wantServiceCall bool   // должен ли запрос дойти до сервиса
 	}{
+		{
+			name: "create: body too large", method: http.MethodPost, path: "/v1/payments",
+			headers:    withKey,
+			body:       `{"merchant_id":"` + strings.Repeat("a", 1<<20) + `","amount_minor":100,"currency":"RUB"}`,
+			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+		},
+		{
+			name: "create: service overloaded", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody, svcErr: paymenterrors.ErrOverloaded,
+			wantStatus: http.StatusServiceUnavailable, wantType: "service-overloaded",
+			wantRetryAfter: "1", wantServiceCall: true,
+		},
+		{
+			name: "get: declined with reason", method: http.MethodGet, path: "/v1/payments/pay-1",
+			svcPayment: declined,
+			wantStatus: http.StatusOK, wantBody: "declined/insufficient_funds",
+		},
 		{
 			name: "create: success", method: http.MethodPost, path: "/v1/payments",
 			headers: withKey, body: validBody, svcPayment: stored,
-			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantServiceCall: true,
+			wantStatus: http.StatusAccepted, wantLocation: "/v1/payments/pay-1", wantServiceCall: true, wantBody: "pending/",
 		},
 		{
 			name: "create: replay", method: http.MethodPost, path: "/v1/payments",
 			headers: withKey, body: validBody, svcPayment: stored, svcReplayed: true,
-			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantReplayed: true, wantServiceCall: true,
+			wantStatus: http.StatusAccepted, wantLocation: "/v1/payments/pay-1", wantReplayed: true, wantServiceCall: true,
 		},
 		{
 			name: "create: missing idempotency key", method: http.MethodPost, path: "/v1/payments",
@@ -117,7 +141,7 @@ func TestAPI(t *testing.T) {
 		{
 			name: "get: found", method: http.MethodGet, path: "/v1/payments/pay-1",
 			svcPayment: stored,
-			wantStatus: http.StatusOK,
+			wantStatus: http.StatusOK, wantBody: "pending/",
 		},
 		{
 			name: "get: not found", method: http.MethodGet, path: "/v1/payments/nope",
@@ -149,6 +173,13 @@ func TestAPI(t *testing.T) {
 			rec := httptest.NewRecorder()
 			api.ServeHTTP(rec, req)
 
+			if got := rec.Header().Get("Retry-After"); got != tt.wantRetryAfter {
+				t.Errorf("Retry-After header: got %q, want %q", got, tt.wantRetryAfter)
+			}
+			if tt.wantBody != "" {
+				assertPaymentBody(t, rec, tt.wantBody)
+			}
+
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status: got %d, want %d; body: %s", rec.Code, tt.wantStatus, rec.Body.String())
 			}
@@ -175,6 +206,30 @@ func TestAPI(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// assertPaymentBody проверяет status и failure_reason в теле ответа о платеже.
+// want - строка вида "declined/insufficient_funds" или "pending/".
+func assertPaymentBody(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+
+	var body struct {
+		Status        string    `json:"status"`
+		FailureReason string    `json:"failure_reason"`
+		CreatedAt     time.Time `json:"created_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode payment: %v; body: %s", err, rec.Body.String())
+	}
+	if got := body.Status + "/" + body.FailureReason; got != want {
+		t.Errorf("status/failure_reason: got %q, want %q", got, want)
+	}
+	if body.CreatedAt.IsZero() {
+		t.Error("created_at is missing")
+	}
+	if strings.Contains(rec.Body.String(), "failure_reason") && body.FailureReason == "" {
+		t.Error("empty failure_reason must be omitted from JSON")
 	}
 }
 
@@ -226,16 +281,16 @@ func TestAPI_CreatePaymentIdempotency(t *testing.T) {
 	body := `{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`
 
 	first := post(body)
-	if first.Code != http.StatusCreated {
-		t.Fatalf("first: status %d, want 201; body: %s", first.Code, first.Body.String())
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first: status %d, want 202; body: %s", first.Code, first.Body.String())
 	}
 	if got := first.Header().Get(httptransport.IdempotentReplayedHeader); got != "" {
 		t.Errorf("first: %s = %q, want no header", httptransport.IdempotentReplayedHeader, got)
 	}
 
 	replay := post(body)
-	if replay.Code != http.StatusCreated {
-		t.Fatalf("replay: status %d, want 201; body: %s", replay.Code, replay.Body.String())
+	if replay.Code != http.StatusAccepted {
+		t.Fatalf("replay: status %d, want 202; body: %s", replay.Code, replay.Body.String())
 	}
 	if got := replay.Header().Get(httptransport.IdempotentReplayedHeader); got != "true" {
 		t.Errorf("replay: %s = %q, want \"true\"", httptransport.IdempotentReplayedHeader, got)

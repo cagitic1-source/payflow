@@ -4,8 +4,10 @@ package service_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
+	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 )
 
@@ -34,6 +36,27 @@ func TestCreatePayment_Success(t *testing.T) {
 	}
 	if repo.saved[0].ID != p.Payment.ID {
 		t.Fatalf("expected saved payment ID %s, got %s", p.Payment.ID, repo.saved[0].ID)
+	}
+}
+
+func TestCreatePayment_UsesServiceClock(t *testing.T) {
+	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
+	repo := &fakeRepo{}
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc.SetNow(func() time.Time { return now })
+
+	p, err := svc.CreatePayment(t.Context(), validPaymentCommand())
+	if err != nil {
+		t.Fatalf("failed to create payment: %v", err)
+	}
+	if p.Payment.Status != paymentdomain.StatusPending {
+		t.Errorf("want status %q, got %q", paymentdomain.StatusPending, p.Payment.Status)
+	}
+	if !p.Payment.CreatedAt.Equal(now) || !p.Payment.UpdatedAt.Equal(now) {
+		t.Errorf("want CreatedAt and UpdatedAt %v, got %v and %v", now, p.Payment.CreatedAt, p.Payment.UpdatedAt)
+	}
+	if len(repo.saved) != 1 || !repo.saved[0].CreatedAt.Equal(now) {
+		t.Errorf("saved payment must carry CreatedAt %v, got %+v", now, repo.saved)
 	}
 }
 
