@@ -9,13 +9,16 @@ import (
 
 type fakePaymentService struct {
 	payment     paymentdomain.Payment
+	replayed    bool // Replayed в ответе CreatePayment
 	err         error
 	createCalls int
+	lastCmd     service.CreatePaymentCommand // команда последнего вызова CreatePayment
 }
 
-func (s *fakePaymentService) CreatePayment(_ context.Context, _ service.CreatePaymentCommand) (service.CreatePaymentResult, error) {
+func (s *fakePaymentService) CreatePayment(_ context.Context, cmd service.CreatePaymentCommand) (service.CreatePaymentResult, error) {
 	s.createCalls++
-	return service.CreatePaymentResult{Payment: s.payment}, s.err
+	s.lastCmd = cmd
+	return service.CreatePaymentResult{Payment: s.payment, Replayed: s.replayed}, s.err
 }
 
 func (s *fakePaymentService) GetPayment(_ context.Context, _ string) (paymentdomain.Payment, error) {

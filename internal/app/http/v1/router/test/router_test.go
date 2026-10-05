@@ -36,51 +36,34 @@ func TestAPI(t *testing.T) {
 		Currency:    "RUB",
 	}
 	validBody := `{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`
+	withKey := map[string]string{"Idempotency-Key": "key-1"}
 
 	tests := []struct {
-		name           string
-		method         string
-		path           string
-		body           string
-		idempotencyKey string // пусто — заголовок не передаётся
+		name    string
+		method  string
+		path    string
+		headers map[string]string
+		body    string
 
-		svcPayment paymentdomain.Payment
-		svcErr     error
+		svcPayment  paymentdomain.Payment
+		svcReplayed bool
+		svcErr      error
 
 		wantStatus      int
 		wantType        string // для ответов-ошибок: последняя часть type или "about:blank"
 		wantLocation    string
+		wantReplayed    bool // ждём заголовок Idempotent-Replayed: true
 		wantServiceCall bool // должен ли запрос дойти до сервиса
 	}{
 		{
 			name: "create: success", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, idempotencyKey: "key-1", svcPayment: stored,
+			headers: withKey, body: validBody, svcPayment: stored,
 			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantServiceCall: true,
 		},
 		{
-			name: "create: malformed JSON", method: http.MethodPost, path: "/v1/payments",
-			body: `{`, idempotencyKey: "key-1",
-			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
-		},
-		{
-			name: "create: unknown field", method: http.MethodPost, path: "/v1/payments",
-			body: `{"merchant_id":"m-1","amount":100,"currency":"RUB"}`, idempotencyKey: "key-1",
-			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
-		},
-		{
-			name: "create: trailing data", method: http.MethodPost, path: "/v1/payments",
-			body: validBody + validBody, idempotencyKey: "key-1",
-			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
-		},
-		{
-			name: "create: validation error from service", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, idempotencyKey: "key-1", svcErr: fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount),
-			wantStatus: http.StatusUnprocessableEntity, wantType: "invalid-amount", wantServiceCall: true,
-		},
-		{
-			name: "create: internal error", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, idempotencyKey: "key-1", svcErr: errors.New("db is down"),
-			wantStatus: http.StatusInternalServerError, wantType: "about:blank", wantServiceCall: true,
+			name: "create: replay", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody, svcPayment: stored, svcReplayed: true,
+			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantReplayed: true, wantServiceCall: true,
 		},
 		{
 			name: "create: missing idempotency key", method: http.MethodPost, path: "/v1/payments",
@@ -89,14 +72,45 @@ func TestAPI(t *testing.T) {
 		},
 		{
 			name: "create: idempotency key too long", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, idempotencyKey: strings.Repeat("k", 256),
-			wantStatus: http.StatusBadRequest,
+			headers: map[string]string{"Idempotency-Key": strings.Repeat("k", 256)}, body: validBody,
+			wantStatus: http.StatusBadRequest, wantType: "missing-idempotency-key",
 		},
 		{
-			name: "create: request with same key in progress", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, idempotencyKey: "key-1",
+			name: "create: idempotency key reused", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody,
+			svcErr:     fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyKeyReused),
+			wantStatus: http.StatusUnprocessableEntity, wantType: "idempotency-key-reused", wantServiceCall: true,
+		},
+		{
+			name: "create: idempotency request in progress", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody,
 			svcErr:     fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyInProgress),
 			wantStatus: http.StatusConflict, wantType: "idempotency-request-in-progress", wantServiceCall: true,
+		},
+		{
+			name: "create: malformed JSON", method: http.MethodPost, path: "/v1/payments",
+			body: `{`, headers: withKey,
+			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+		},
+		{
+			name: "create: unknown field", method: http.MethodPost, path: "/v1/payments",
+			body: `{"merchant_id":"m-1","amount":100,"currency":"RUB"}`, headers: withKey,
+			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+		},
+		{
+			name: "create: trailing data", method: http.MethodPost, path: "/v1/payments",
+			body: validBody + validBody, headers: withKey,
+			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+		},
+		{
+			name: "create: validation error from service", method: http.MethodPost, path: "/v1/payments",
+			body: validBody, headers: withKey, svcErr: fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount),
+			wantStatus: http.StatusUnprocessableEntity, wantType: "invalid-amount", wantServiceCall: true,
+		},
+		{
+			name: "create: internal error", method: http.MethodPost, path: "/v1/payments",
+			body: validBody, headers: withKey, svcErr: errors.New("db is down"),
+			wantStatus: http.StatusInternalServerError, wantType: "about:blank", wantServiceCall: true,
 		},
 
 		// --- GET /v1/payments/{id} ---
@@ -121,15 +135,16 @@ func TestAPI(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &fakePaymentService{
-				payment: tt.svcPayment,
-				err:     tt.svcErr,
+				payment:  tt.svcPayment,
+				replayed: tt.svcReplayed,
+				err:      tt.svcErr,
 			}
 			log := zap.NewNop()
 			api := router.New(log, httptransport.NewPaymentHandler(svc, log))
 
 			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, strings.NewReader(tt.body))
-			if tt.idempotencyKey != "" {
-				req.Header.Set("Idempotency-Key", tt.idempotencyKey)
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
 			}
 			rec := httptest.NewRecorder()
 			api.ServeHTTP(rec, req)
@@ -146,8 +161,18 @@ func TestAPI(t *testing.T) {
 			if tt.wantType != "" {
 				assertProblemType(t, rec, tt.wantType)
 			}
-			if tt.method == http.MethodPost && tt.wantServiceCall != (svc.createCalls > 0) {
-				t.Errorf("service called %d times, want called: %v", svc.createCalls, tt.wantServiceCall)
+			if got := rec.Header().Get("Idempotent-Replayed") == "true"; got != tt.wantReplayed {
+				t.Errorf("Idempotent-Replayed header: got %v, want %v", got, tt.wantReplayed)
+			}
+			if tt.method == http.MethodPost {
+				if tt.wantServiceCall != (svc.createCalls > 0) {
+					t.Errorf("service called %d times, want called: %v", svc.createCalls, tt.wantServiceCall)
+				}
+				// Транспорт должен передать в сервис именно тот ключ, что пришёл в заголовке.
+				if tt.wantServiceCall && svc.lastCmd.IdempotencyKey != tt.headers["Idempotency-Key"] {
+					t.Errorf("idempotency key passed to service: got %q, want %q",
+						svc.lastCmd.IdempotencyKey, tt.headers["Idempotency-Key"])
+				}
 			}
 		})
 	}
