@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
@@ -53,6 +54,7 @@ type fakeIdempotencyEntry struct {
 // fakeIdempotencyStore повторяет контракт service.IdempotencyStore без TTL.
 // Нулевое значение готово к работе.
 type fakeIdempotencyStore struct {
+	mu           sync.RWMutex
 	entries      map[service.IdempotencyKey]fakeIdempotencyEntry
 	reserveErr   error // если задан, Reserve вернёт его
 	completeErr  error // если задан, Complete вернёт его
@@ -60,6 +62,9 @@ type fakeIdempotencyStore struct {
 }
 
 func (s *fakeIdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey, fingerprint string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.reserveErr != nil {
 		return "", s.reserveErr
 	}
@@ -82,6 +87,9 @@ func (s *fakeIdempotencyStore) Reserve(_ context.Context, key service.Idempotenc
 }
 
 func (s *fakeIdempotencyStore) Complete(_ context.Context, key service.IdempotencyKey, paymentID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.completeErr != nil {
 		return s.completeErr
 	}
@@ -96,6 +104,9 @@ func (s *fakeIdempotencyStore) Complete(_ context.Context, key service.Idempoten
 }
 
 func (s *fakeIdempotencyStore) Release(_ context.Context, key service.IdempotencyKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.releaseCalls++
 	if e, ok := s.entries[key]; ok && e.paymentID == "" {
 		delete(s.entries, key)
