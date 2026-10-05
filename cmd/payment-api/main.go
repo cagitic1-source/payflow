@@ -23,6 +23,9 @@ import (
 // времени повтор запроса вернёт уже созданный платёж.
 const idempotencyKeyTTL = 24 * time.Hour
 
+// idempotencyCleanupInterval - как часто удалять истёкшие ключи идемпотентности.
+const idempotencyCleanupInterval = time.Hour
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -43,6 +46,7 @@ func run() error {
 
 	repo := memory.NewPaymentRepository()
 	idempotency := memory.NewIdempotencyStore(idempotencyKeyTTL)
+	go idempotency.RunCleanup(ctx, idempotencyCleanupInterval)
 	svc := service.NewPaymentService(repo, idempotency)
 	handler := router.New(logger, httptransport.NewPaymentHandler(svc, logger))
 
