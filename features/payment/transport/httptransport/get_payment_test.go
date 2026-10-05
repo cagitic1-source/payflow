@@ -2,7 +2,6 @@
 package httptransport_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -15,20 +14,7 @@ import (
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	"github.com/cagitic1-source/payflow/features/payment/transport/httptransport"
-	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 )
-
-type failingService struct {
-	err error
-}
-
-func (s failingService) CreatePayment(_ context.Context, _ service.CreatePaymentCommand) (service.CreatePaymentResult, error) {
-	return service.CreatePaymentResult{}, s.err
-}
-
-func (s failingService) GetPayment(_ context.Context, _ string) (paymentdomain.Payment, error) {
-	return paymentdomain.Payment{}, s.err
-}
 
 func newService() *service.PaymentService {
 	return service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
@@ -110,7 +96,7 @@ func TestGetPayment_NotFound(t *testing.T) {
 }
 
 func TestGetPayment_InternalError(t *testing.T) {
-	svc := failingService{err: errors.New("db is down")}
+	svc := &fakePaymentService{err: errors.New("db is down")}
 
 	rec := httptest.NewRecorder()
 	newMux(svc).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/payments/some-id", nil))
