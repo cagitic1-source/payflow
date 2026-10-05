@@ -39,11 +39,8 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Println("Запуск HTTP сервера")
+	logger.Info("starting http server", zap.String("addr", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil {
-		log.Printf("HTTP server error: %v", err)
-		return
-
+		logger.Error("http server stopped", zap.Error(err))
 	}
-
 }
