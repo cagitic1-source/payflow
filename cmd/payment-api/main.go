@@ -34,6 +34,11 @@ func main() {
 }
 
 func run() error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
 	logger, err := zap.NewProduction()
 	if err != nil {
 		return fmt.Errorf("init logger: %w", err)
@@ -51,10 +56,10 @@ func run() error {
 	handler := router.New(logger, httptransport.NewPaymentHandler(svc, logger))
 
 	var lc net.ListenConfig
-	ln, err := lc.Listen(ctx, "tcp", ":8080")
+	ln, err := lc.Listen(ctx, "tcp", cfg.addr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	return server.Run(ctx, ln, handler, server.DefaultConfig(), logger)
+	return server.Run(ctx, ln, handler, cfg.server, logger)
 }
