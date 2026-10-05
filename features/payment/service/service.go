@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 )
@@ -15,6 +16,7 @@ import (
 type PaymentService struct {
 	payments    PaymentRepository
 	idempotency IdempotencyStore
+	now         func() time.Time // в тестах подменяется
 }
 
 // IdempotencyKey - ключ идемпотентности в области одного мерчанта.
@@ -64,6 +66,7 @@ func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore)
 	return &PaymentService{
 		payments:    payments,
 		idempotency: idempotency,
+		now:         time.Now,
 	}
 }
 

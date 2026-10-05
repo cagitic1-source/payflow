@@ -1,14 +1,22 @@
 // Package paymentdomain contains payment domain types.
 package paymentdomain
 
-import paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+import (
+	"time"
+
+	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+)
 
 // Payment - платёж. Создавайте его через NewPayment: он проверяет инварианты.
 type Payment struct {
-	ID          string
-	MerchantID  string
-	AmountMinor int64  // сумма в минимальных единицах валюты, всегда > 0
-	Currency    string // код ISO 4217 из supportedCurrencies
+	ID            string
+	MerchantID    string
+	AmountMinor   int64
+	Currency      string
+	Status        Status
+	FailureReason string // только для declined и failed
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 var supportedCurrencies = map[string]struct{}{
@@ -19,7 +27,7 @@ var supportedCurrencies = map[string]struct{}{
 
 // NewPayment создаёт платёж после проверки данных. Все ошибки оборачивают
 // paymenterrors.ErrValidation.
-func NewPayment(id string, merchantID string, amountMinor int64, currency string) (Payment, error) {
+func NewPayment(id string, merchantID string, amountMinor int64, currency string, now time.Time) (Payment, error) {
 	if merchantID == "" {
 		return Payment{}, paymenterrors.ErrEmptyMerchantID
 	}
@@ -35,11 +43,15 @@ func NewPayment(id string, merchantID string, amountMinor int64, currency string
 	if _, ok := supportedCurrencies[currency]; !ok {
 		return Payment{}, paymenterrors.ErrUnsupportedCurrency
 	}
+	now = now.UTC()
 
 	return Payment{
 		ID:          id,
 		MerchantID:  merchantID,
 		AmountMinor: amountMinor,
 		Currency:    currency,
+		Status:      StatusPending,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}, nil
 }

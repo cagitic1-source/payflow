@@ -22,7 +22,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCom
 	}
 
 	id := uuid.NewV7()
-	p, err := paymentdomain.NewPayment(id.String(), cmd.MerchantID, cmd.AmountMinor, cmd.Currency)
+	p, err := paymentdomain.NewPayment(id.String(), cmd.MerchantID, cmd.AmountMinor, cmd.Currency, s.now())
 	if err != nil {
 		return CreatePaymentResult{}, err
 	}

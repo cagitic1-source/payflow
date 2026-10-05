@@ -26,3 +26,12 @@ var (
 	// ErrEmptyIdempotencyKey - запрос пришёл без ключа идемпотентности.
 	ErrEmptyIdempotencyKey = fmt.Errorf("%w: idempotency key is empty", ErrValidation)
 )
+
+// Ошибки смены статуса платежа. Это не ошибки входных данных,
+// поэтому ErrValidation они не оборачивают.
+var (
+	// ErrInvalidTransition - недопустимая смена статуса платежа.
+	ErrInvalidTransition = errors.New("invalid payment status transition")
+	// ErrEmptyFailureReason - отказ или ошибка без причины.
+	ErrEmptyFailureReason = errors.New("failure reason is empty")
+)

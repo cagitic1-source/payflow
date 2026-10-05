@@ -3,6 +3,7 @@ package httptransport
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -25,18 +26,26 @@ func (r createPaymentRequest) toCommand() service.CreatePaymentCommand {
 }
 
 type paymentResponse struct {
-	ID          string `json:"id"`
-	MerchantID  string `json:"merchant_id"`
-	AmountMinor int64  `json:"amount_minor"`
-	Currency    string `json:"currency"`
+	ID            string    `json:"id"`
+	MerchantID    string    `json:"merchant_id"`
+	AmountMinor   int64     `json:"amount_minor"`
+	Currency      string    `json:"currency"`
+	Status        string    `json:"status"`
+	FailureReason string    `json:"failure_reason,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 func toPaymentResponse(p paymentdomain.Payment) paymentResponse {
 	return paymentResponse{
-		ID:          p.ID,
-		MerchantID:  p.MerchantID,
-		AmountMinor: p.AmountMinor,
-		Currency:    p.Currency,
+		ID:            p.ID,
+		MerchantID:    p.MerchantID,
+		AmountMinor:   p.AmountMinor,
+		Currency:      p.Currency,
+		Status:        string(p.Status),
+		FailureReason: p.FailureReason,
+		CreatedAt:     p.CreatedAt,
+		UpdatedAt:     p.UpdatedAt,
 	}
 }
 
