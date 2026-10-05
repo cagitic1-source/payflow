@@ -27,6 +27,11 @@ var (
 	ErrEmptyIdempotencyKey = fmt.Errorf("%w: idempotency key is empty", ErrValidation)
 )
 
+var (
+	// ErrOverloaded - система не может принять платёж прямо сейчас.
+	ErrOverloaded = errors.New("service is overloaded")
+)
+
 // Ошибки смены статуса платежа. Это не ошибки входных данных,
 // поэтому ErrValidation они не оборачивают.
 var (

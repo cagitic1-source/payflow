@@ -13,23 +13,25 @@ import (
 
 // problem - тело ответа об ошибке по RFC 9457.
 type problem struct {
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	Status    int    `json:"status"`
-	Detail    string `json:"detail"`
-	Instance  string `json:"instance,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-	Field     string `json:"field,omitempty"`
+	Type       string `json:"type"`
+	Title      string `json:"title"`
+	Status     int    `json:"status"`
+	Detail     string `json:"detail"`
+	Instance   string `json:"instance,omitempty"`
+	RequestID  string `json:"request_id,omitempty"`
+	Field      string `json:"field,omitempty"`
+	retryAfter string
 }
 
 // problemSpec - одна строка таблицы «ошибка → ответ клиенту».
 type problemSpec struct {
-	err    error
-	status int
-	slug   string // последняя часть type URI
-	title  string
-	detail string
-	field  string
+	err        error
+	status     int
+	slug       string
+	title      string
+	detail     string
+	field      string
+	retryAfter string // если не пусто - заголовок Retry-After
 }
 
 const problemTypeBase = "https://payflow.dev/problems/"
@@ -69,6 +71,12 @@ var problemSpecs = []problemSpec{
 
 	// --- 409 ---
 	{
+		err: paymenterrors.ErrOverloaded, status: http.StatusServiceUnavailable,
+		slug: "service-overloaded", title: "Service overloaded",
+		detail:     "the service cannot accept payments right now, retry later",
+		retryAfter: "1",
+	},
+	{
 		err: paymenterrors.ErrIdempotencyInProgress, status: http.StatusConflict,
 		slug: "idempotency-request-in-progress", title: "Request in progress",
 		detail: "a request with this Idempotency-Key is still being processed, retry later",
@@ -105,11 +113,12 @@ func problemFromError(err error) problem {
 	for _, spec := range problemSpecs {
 		if errors.Is(err, spec.err) {
 			return problem{
-				Type:   problemTypeBase + spec.slug,
-				Title:  spec.title,
-				Status: spec.status,
-				Detail: spec.detail,
-				Field:  spec.field,
+				Type:       problemTypeBase + spec.slug,
+				Title:      spec.title,
+				Status:     spec.status,
+				Detail:     spec.detail,
+				Field:      spec.field,
+				retryAfter: spec.retryAfter,
 			}
 		}
 	}
@@ -127,12 +136,23 @@ func respondError(w http.ResponseWriter, r *http.Request, log *zap.Logger, err e
 	p.Instance = r.URL.Path
 
 	if p.Status >= http.StatusInternalServerError {
-		log.Error("request failed",
+		fields := []zap.Field{
 			zap.String("method", r.Method),
 			zap.String("url", r.URL.String()),
 			zap.Int("status", p.Status),
-			zap.Error(err))
+			zap.Error(err),
+		}
+		// 503 - штатный отказ при перегрузке, а не сбой сервиса.
+		if p.Status == http.StatusServiceUnavailable {
+			log.Warn("request rejected", fields...)
+		} else {
+			log.Error("request failed", fields...)
+		}
 	}
+	if p.retryAfter != "" {
+		w.Header().Set("Retry-After", p.retryAfter)
+	}
+
 	p.RequestID = requestctx.RequestID(r.Context())
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)
