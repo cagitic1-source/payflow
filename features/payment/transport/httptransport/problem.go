@@ -11,7 +11,7 @@ import (
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
-// problem — тело ответа об ошибке по RFC 9457.
+// problem - тело ответа об ошибке по RFC 9457.
 type problem struct {
 	Type      string `json:"type"`
 	Title     string `json:"title"`
@@ -22,7 +22,7 @@ type problem struct {
 	Field     string `json:"field,omitempty"`
 }
 
-// problemSpec — одна строка таблицы «ошибка → ответ клиенту».
+// problemSpec - одна строка таблицы «ошибка → ответ клиенту».
 type problemSpec struct {
 	err    error
 	status int

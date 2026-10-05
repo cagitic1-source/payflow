@@ -177,7 +177,7 @@ func TestIdempotencyStore_Expired(t *testing.T) {
 	key := service.IdempotencyKey{MerchantID: "m-1", Key: "abc"}
 	const fp = "Алабай"
 
-	// Первый запрос: ключа нет — резервируем.
+	// Первый запрос: ключа нет - резервируем.
 	got, err := store.Reserve(t.Context(), key, fp)
 	if err != nil {
 		t.Fatalf("Reserve: %v", err)
@@ -189,7 +189,7 @@ func TestIdempotencyStore_Expired(t *testing.T) {
 		t.Fatalf("Complete: %v", err)
 	}
 
-	// Ровно на границе TTL запись ещё жива — повтор возвращает тот же платёж.
+	// Ровно на границе TTL запись ещё жива - повтор возвращает тот же платёж.
 	// Без этой проверки тест прошёл бы, даже если запись просто пропала.
 	now = now.Add(ttl)
 	got, err = store.Reserve(t.Context(), key, fp)

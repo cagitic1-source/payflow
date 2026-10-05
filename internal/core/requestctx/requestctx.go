@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Ключи — неэкспортируемые типы: другой пакет не сможет создать такой же ключ
+// Ключи - неэкспортируемые типы: другой пакет не сможет создать такой же ключ
 // и случайно перезаписать значение.
 type requestIDKey struct{}
 type loggerKey struct{}
@@ -23,7 +23,7 @@ func RequestID(ctx context.Context) string {
 	return id
 }
 
-// WithLogger возвращает копию ctx с логгером запроса — обычно уже
+// WithLogger возвращает копию ctx с логгером запроса - обычно уже
 // дополненным полем request_id.
 func WithLogger(ctx context.Context, log *zap.Logger) context.Context {
 	return context.WithValue(ctx, loggerKey{}, log)

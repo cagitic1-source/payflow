@@ -9,7 +9,7 @@ import (
 )
 
 // GetPayment возвращает платёж по id. Для пустого id возвращает
-// paymenterrors.ErrEmptyPaymentID, для несуществующего — ошибку с paymenterrors.ErrNotFound.
+// paymenterrors.ErrEmptyPaymentID, для несуществующего - ошибку с paymenterrors.ErrNotFound.
 func (s *PaymentService) GetPayment(ctx context.Context, id string) (paymentdomain.Payment, error) {
 	if id == "" {
 		return paymentdomain.Payment{}, paymenterrors.ErrEmptyPaymentID

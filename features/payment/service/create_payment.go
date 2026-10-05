@@ -29,7 +29,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCom
 
 	existingID, err := s.idempotency.Reserve(ctx, key, fingerprint(cmd))
 	if err != nil {
-		// Конфликт или повторное использование ключа — создавать нельзя.
+		// Конфликт или повторное использование ключа - создавать нельзя.
 		return CreatePaymentResult{}, fmt.Errorf("reserve idempotency key: %w", err)
 	}
 	if existingID != "" {

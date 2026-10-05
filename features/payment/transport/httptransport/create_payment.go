@@ -12,9 +12,9 @@ import (
 
 // CreatePayment обрабатывает POST /v1/payments: создаёт платёж и отвечает 201
 // с телом платежа и заголовком Location. Невалидное тело или нет заголовка
-// Idempotency-Key — 400, ошибки валидации — 422. Повтор с тем же ключом
+// Idempotency-Key - 400, ошибки валидации - 422. Повтор с тем же ключом
 // и телом получает тот же ответ с заголовком Idempotent-Replayed: true;
-// пока первый запрос выполняется — 409, ключ с другим телом — 422.
+// пока первый запрос выполняется - 409, ключ с другим телом - 422.
 func (h *PaymentHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get(idempotencyKeyHeader)
 	if key == "" || len(key) > 255 {

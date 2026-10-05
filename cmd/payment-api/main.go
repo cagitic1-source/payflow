@@ -14,7 +14,7 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 )
 
-// idempotencyKeyTTL — сколько живёт ключ идемпотентности: в течение этого
+// idempotencyKeyTTL - сколько живёт ключ идемпотентности: в течение этого
 // времени повтор запроса вернёт уже созданный платёж.
 const idempotencyKeyTTL = 24 * time.Hour
 

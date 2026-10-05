@@ -15,7 +15,7 @@ func TestNewPayment(t *testing.T) {
 		merchantID  string
 		amountMinor int64
 		currency    string
-		wantErr     error // nil — ошибки быть не должно
+		wantErr     error // nil - ошибки быть не должно
 	}{
 		{name: "valid RUB", id: "id-1", merchantID: "m-1", amountMinor: 100, currency: "RUB"},
 		{name: "valid USD", id: "id-2", merchantID: "m-2", amountMinor: 1, currency: "USD"},

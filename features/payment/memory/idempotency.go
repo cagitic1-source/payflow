@@ -34,8 +34,8 @@ func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
 }
 
 // Reserve атомарно занимает ключ. Повтор завершённой операции с тем же
-// отпечатком получает id созданного платежа; пока операция выполняется —
-// paymenterrors.ErrIdempotencyInProgress, другой отпечаток —
+// отпечатком получает id созданного платежа; пока операция выполняется -
+// paymenterrors.ErrIdempotencyInProgress, другой отпечаток -
 // paymenterrors.ErrIdempotencyKeyReused. Истёкшая запись считается отсутствующей.
 func (s *IdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey, fp string) (string, error) {
 	s.mu.Lock()
@@ -44,12 +44,12 @@ func (s *IdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey
 	now := s.now()
 	e, ok := s.entries[key]
 
-	// Истёкшая запись — как будто её нет.
+	// Истёкшая запись - как будто её нет.
 	if ok && now.After(e.expiresAt) {
 		ok = false
 	}
 
-	// Ключа нет: занимаем его. paymentID пустой — значит «выполняется».
+	// Ключа нет: занимаем его. paymentID пустой - значит «выполняется».
 	if !ok {
 		s.entries[key] = idempotencyEntry{
 			fingerprint: fp,
@@ -57,17 +57,17 @@ func (s *IdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey
 		}
 		return "", nil
 	}
-	// Ключ есть, но запрос другой — клиент перепутал ключи.
+	// Ключ есть, но запрос другой - клиент перепутал ключи.
 	if e.fingerprint != fp {
 		return "", paymenterrors.ErrIdempotencyKeyReused
 	}
 
-	// Тот же запрос, но первый ещё выполняется — второй создавать нельзя.
+	// Тот же запрос, но первый ещё выполняется - второй создавать нельзя.
 	if e.paymentID == "" {
 		return "", paymenterrors.ErrIdempotencyInProgress
 	}
 
-	// Тот же запрос, первый уже завершён — повтор.
+	// Тот же запрос, первый уже завершён - повтор.
 	return e.paymentID, nil
 }
 

@@ -11,7 +11,7 @@ import (
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
-// RequestIDHeader — заголовок, в котором id запроса приходит от клиента
+// RequestIDHeader - заголовок, в котором id запроса приходит от клиента
 // и возвращается в ответе.
 const RequestIDHeader = "X-Request-ID"
 

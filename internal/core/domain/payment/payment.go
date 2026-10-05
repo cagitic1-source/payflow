@@ -3,7 +3,7 @@ package paymentdomain
 
 import paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 
-// Payment — платёж. Создавайте его через NewPayment: он проверяет инварианты.
+// Payment - платёж. Создавайте его через NewPayment: он проверяет инварианты.
 type Payment struct {
 	ID          string
 	MerchantID  string

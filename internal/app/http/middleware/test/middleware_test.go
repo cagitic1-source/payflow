@@ -20,7 +20,7 @@ func TestRequestID(t *testing.T) {
 	tests := []struct {
 		name       string
 		header     string
-		wantPassed bool // true — id из заголовка должен сохраниться
+		wantPassed bool // true - id из заголовка должен сохраниться
 	}{
 		{name: "no header", header: "", wantPassed: false},
 		{name: "valid header", header: "abc-123_XYZ", wantPassed: true},

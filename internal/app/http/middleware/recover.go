@@ -14,7 +14,7 @@ import (
 // в формате application/problem+json с request_id.
 //
 // Логгер берётся из контекста (его кладёт RequestID); log используется,
-// только если его там нет. http.ErrAbortHandler не перехватывается —
+// только если его там нет. http.ErrAbortHandler не перехватывается -
 // это штатный способ оборвать ответ.
 func Recover(log *zap.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -23,12 +23,12 @@ func Recover(log *zap.Logger, next http.Handler) http.Handler {
 			if rec == nil {
 				return
 			}
-			// ErrAbortHandler — штатный способ оборвать ответ, его не глушим
+			// ErrAbortHandler - штатный способ оборвать ответ, его не глушим
 			if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(rec)
 			}
 
-			// Без RequestID снаружи логгера в контексте нет — берём базовый.
+			// Без RequestID снаружи логгера в контексте нет - берём базовый.
 			logger := requestctx.Logger(r.Context())
 			if logger == nil {
 				logger = log
