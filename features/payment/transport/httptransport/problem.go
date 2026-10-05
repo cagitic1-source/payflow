@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
 // problem — тело ответа об ошибке по RFC 9457.
@@ -132,7 +133,7 @@ func respondError(w http.ResponseWriter, r *http.Request, log *zap.Logger, err e
 			zap.Int("status", p.Status),
 			zap.Error(err))
 	}
-
+	p.RequestID = requestctx.RequestID(r.Context())
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.Status)
 
