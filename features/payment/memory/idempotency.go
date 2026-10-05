@@ -33,6 +33,10 @@ func NewIdempotencyStore(ttl time.Duration) *IdempotencyStore {
 	}
 }
 
+// Reserve атомарно занимает ключ. Повтор завершённой операции с тем же
+// отпечатком получает id созданного платежа; пока операция выполняется —
+// paymenterrors.ErrIdempotencyInProgress, другой отпечаток —
+// paymenterrors.ErrIdempotencyKeyReused. Истёкшая запись считается отсутствующей.
 func (s *IdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey, fp string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -85,7 +89,7 @@ func (s *IdempotencyStore) Complete(_ context.Context, key service.IdempotencyKe
 }
 
 // Release освобождает ключ после неудачи, чтобы повтор мог выполниться заново.
-func (s *IdempotencyStore) Release(ctx context.Context, key service.IdempotencyKey) error {
+func (s *IdempotencyStore) Release(_ context.Context, key service.IdempotencyKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
