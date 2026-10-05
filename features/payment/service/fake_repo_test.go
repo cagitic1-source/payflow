@@ -2,10 +2,19 @@ package service_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+)
+
+// Фейки обязаны реализовывать интерфейсы сервиса: при смене сигнатуры
+// ошибка компиляции укажет сюда, а не на место вызова.
+var (
+	_ service.PaymentRepository = (*fakeRepo)(nil)
+	_ service.IdempotencyStore  = (*fakeIdempotencyStore)(nil)
 )
 
 type fakeRepo struct {
@@ -37,10 +46,79 @@ func (r *fakeRepo) Get(_ context.Context, id string) (paymentdomain.Payment, err
 	return paymentdomain.Payment{}, paymenterrors.ErrNotFound
 }
 
+type fakeIdempotencyEntry struct {
+	fingerprint string
+	paymentID   string // пусто, пока операция выполняется
+}
+
+// fakeIdempotencyStore повторяет контракт service.IdempotencyStore без TTL.
+// Нулевое значение готово к работе.
+type fakeIdempotencyStore struct {
+	mu           sync.RWMutex
+	entries      map[service.IdempotencyKey]fakeIdempotencyEntry
+	reserveErr   error // если задан, Reserve вернёт его
+	completeErr  error // если задан, Complete вернёт его
+	releaseCalls int
+}
+
+func (s *fakeIdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey, fingerprint string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.reserveErr != nil {
+		return "", s.reserveErr
+	}
+	if s.entries == nil {
+		s.entries = make(map[service.IdempotencyKey]fakeIdempotencyEntry)
+	}
+
+	e, ok := s.entries[key]
+	switch {
+	case !ok:
+		s.entries[key] = fakeIdempotencyEntry{fingerprint: fingerprint}
+		return "", nil
+	case e.fingerprint != fingerprint:
+		return "", paymenterrors.ErrIdempotencyKeyReused
+	case e.paymentID == "":
+		return "", paymenterrors.ErrIdempotencyInProgress
+	default:
+		return e.paymentID, nil
+	}
+}
+
+func (s *fakeIdempotencyStore) Complete(_ context.Context, key service.IdempotencyKey, paymentID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.completeErr != nil {
+		return s.completeErr
+	}
+
+	e, ok := s.entries[key]
+	if !ok {
+		return fmt.Errorf("idempotency key %s not reserved", key.Key)
+	}
+	e.paymentID = paymentID
+	s.entries[key] = e
+	return nil
+}
+
+func (s *fakeIdempotencyStore) Release(_ context.Context, key service.IdempotencyKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.releaseCalls++
+	if e, ok := s.entries[key]; ok && e.paymentID == "" {
+		delete(s.entries, key)
+	}
+	return nil
+}
+
 func validPaymentCommand() service.CreatePaymentCommand {
 	return service.CreatePaymentCommand{
-		MerchantID:  "merchant1",
-		AmountMinor: 1000,
-		Currency:    "USD",
+		MerchantID:     "merchant1",
+		AmountMinor:    1000,
+		Currency:       "USD",
+		IdempotencyKey: "key-1",
 	}
 }

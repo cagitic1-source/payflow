@@ -2,31 +2,22 @@
 package httptransport_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	"github.com/cagitic1-source/payflow/features/payment/transport/httptransport"
-	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 )
 
-type failingService struct {
-	err error
-}
-
-func (s failingService) CreatePayment(_ context.Context, _ service.CreatePaymentCommand) (paymentdomain.Payment, error) {
-	return paymentdomain.Payment{}, s.err
-}
-
-func (s failingService) GetPayment(_ context.Context, _ string) (paymentdomain.Payment, error) {
-	return paymentdomain.Payment{}, s.err
+func newService() *service.PaymentService {
+	return service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
 }
 
 func newMux(svc httptransport.PaymentService) *http.ServeMux {
@@ -37,16 +28,16 @@ func newMux(svc httptransport.PaymentService) *http.ServeMux {
 }
 
 func TestGetPayment_Found(t *testing.T) {
-	svc := service.NewPaymentService(memory.NewPaymentRepository())
+	svc := newService()
 	created, err := svc.CreatePayment(t.Context(), service.CreatePaymentCommand{
-		MerchantID: "merchant1", AmountMinor: 1000, Currency: "USD",
+		MerchantID: "merchant1", AmountMinor: 1000, Currency: "USD", IdempotencyKey: "key-1",
 	})
 	if err != nil {
 		t.Fatalf("create payment: %v", err)
 	}
 
 	rec := httptest.NewRecorder()
-	newMux(svc).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/payments/"+created.ID, nil))
+	newMux(svc).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/payments/"+created.Payment.ID, nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("want status 200, got %d: %s", rec.Code, rec.Body)
@@ -60,7 +51,7 @@ func TestGetPayment_Found(t *testing.T) {
 		t.Fatalf("decode body: %v", err)
 	}
 	want := map[string]any{
-		"id":           created.ID,
+		"id":           created.Payment.ID,
 		"merchant_id":  "merchant1",
 		"amount_minor": float64(1000),
 		"currency":     "USD",
@@ -73,7 +64,7 @@ func TestGetPayment_Found(t *testing.T) {
 }
 
 func TestGetPayment_NotFound(t *testing.T) {
-	svc := service.NewPaymentService(memory.NewPaymentRepository())
+	svc := newService()
 
 	rec := httptest.NewRecorder()
 	newMux(svc).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/payments/unknown", nil))
@@ -105,7 +96,7 @@ func TestGetPayment_NotFound(t *testing.T) {
 }
 
 func TestGetPayment_InternalError(t *testing.T) {
-	svc := failingService{err: errors.New("db is down")}
+	svc := &fakePaymentService{err: errors.New("db is down")}
 
 	rec := httptest.NewRecorder()
 	newMux(svc).ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/payments/some-id", nil))

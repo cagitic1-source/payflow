@@ -1,0 +1,39 @@
+@baseUrl = http://localhost:8080
+
+### Без ключа → 400 missing-idempotency-key
+POST {{baseUrl}}/v1/payments
+Content-Type: application/json
+
+{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}
+
+### Создать платёж → 201
+# @name create
+POST {{baseUrl}}/v1/payments
+Content-Type: application/json
+Idempotency-Key: k1
+
+{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}
+
+### Повтор с тем же ключом → 201, тот же id, Idempotent-Replayed: true
+POST {{baseUrl}}/v1/payments
+Content-Type: application/json
+Idempotency-Key: k1
+
+{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}
+
+### Тот же ключ, другая сумма → 422 idempotency-key-reused
+POST {{baseUrl}}/v1/payments
+Content-Type: application/json
+Idempotency-Key: k1
+
+{"merchant_id":"m-1","amount_minor":999,"currency":"RUB"}
+
+### Получить созданный платёж → 200
+GET {{baseUrl}}/v1/payments/{{create.response.body.$.id}}
+
+### Каждый раз новый ключ → всегда новый платёж
+POST {{baseUrl}}/v1/payments
+Content-Type: application/json
+Idempotency-Key: {{$guid}}
+
+{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}

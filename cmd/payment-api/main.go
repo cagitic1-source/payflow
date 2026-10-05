@@ -14,6 +14,10 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 )
 
+// idempotencyKeyTTL — сколько живёт ключ идемпотентности: в течение этого
+// времени повтор запроса вернёт уже созданный платёж.
+const idempotencyKeyTTL = 24 * time.Hour
+
 func main() {
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -22,7 +26,8 @@ func main() {
 	defer func() { _ = logger.Sync() }()
 
 	paymentRepo := memory.NewPaymentRepository()
-	paymentService := service.NewPaymentService(paymentRepo)
+	idempotencyStore := memory.NewIdempotencyStore(idempotencyKeyTTL)
+	paymentService := service.NewPaymentService(paymentRepo, idempotencyStore)
 	paymentTransport := httptransport.NewPaymentHandler(paymentService, logger)
 
 	srv := &http.Server{
@@ -34,11 +39,8 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Println("Запуск HTTP сервера")
+	logger.Info("starting http server", zap.String("addr", srv.Addr))
 	if err := srv.ListenAndServe(); err != nil {
-		log.Printf("HTTP server error: %v", err)
-		return
-
+		logger.Error("http server stopped", zap.Error(err))
 	}
-
 }

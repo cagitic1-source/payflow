@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -23,7 +24,7 @@ import (
 
 func newRouter() http.Handler {
 	log := zap.NewNop()
-	svc := service.NewPaymentService(memory.NewPaymentRepository())
+	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
 	return router.New(log, httptransport.NewPaymentHandler(svc, log))
 }
 
@@ -35,49 +36,80 @@ func TestAPI(t *testing.T) {
 		Currency:    "RUB",
 	}
 	validBody := `{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`
+	withKey := map[string]string{"Idempotency-Key": "key-1"}
 
 	tests := []struct {
-		name   string
-		method string
-		path   string
-		body   string
+		name    string
+		method  string
+		path    string
+		headers map[string]string
+		body    string
 
-		svcPayment paymentdomain.Payment
-		svcErr     error
+		svcPayment  paymentdomain.Payment
+		svcReplayed bool
+		svcErr      error
 
 		wantStatus      int
 		wantType        string // для ответов-ошибок: последняя часть type или "about:blank"
 		wantLocation    string
+		wantReplayed    bool // ждём заголовок Idempotent-Replayed: true
 		wantServiceCall bool // должен ли запрос дойти до сервиса
 	}{
 		{
 			name: "create: success", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, svcPayment: stored,
+			headers: withKey, body: validBody, svcPayment: stored,
 			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantServiceCall: true,
 		},
 		{
+			name: "create: replay", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody, svcPayment: stored, svcReplayed: true,
+			wantStatus: http.StatusCreated, wantLocation: "/v1/payments/pay-1", wantReplayed: true, wantServiceCall: true,
+		},
+		{
+			name: "create: missing idempotency key", method: http.MethodPost, path: "/v1/payments",
+			body:       validBody,
+			wantStatus: http.StatusBadRequest, wantType: "missing-idempotency-key",
+		},
+		{
+			name: "create: idempotency key too long", method: http.MethodPost, path: "/v1/payments",
+			headers: map[string]string{"Idempotency-Key": strings.Repeat("k", 256)}, body: validBody,
+			wantStatus: http.StatusBadRequest, wantType: "missing-idempotency-key",
+		},
+		{
+			name: "create: idempotency key reused", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody,
+			svcErr:     fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyKeyReused),
+			wantStatus: http.StatusUnprocessableEntity, wantType: "idempotency-key-reused", wantServiceCall: true,
+		},
+		{
+			name: "create: idempotency request in progress", method: http.MethodPost, path: "/v1/payments",
+			headers: withKey, body: validBody,
+			svcErr:     fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyInProgress),
+			wantStatus: http.StatusConflict, wantType: "idempotency-request-in-progress", wantServiceCall: true,
+		},
+		{
 			name: "create: malformed JSON", method: http.MethodPost, path: "/v1/payments",
-			body:       `{`,
+			body: `{`, headers: withKey,
 			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
 		},
 		{
 			name: "create: unknown field", method: http.MethodPost, path: "/v1/payments",
-			body:       `{"merchant_id":"m-1","amount":100,"currency":"RUB"}`,
+			body: `{"merchant_id":"m-1","amount":100,"currency":"RUB"}`, headers: withKey,
 			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
 		},
 		{
 			name: "create: trailing data", method: http.MethodPost, path: "/v1/payments",
-			body:       validBody + validBody,
+			body: validBody + validBody, headers: withKey,
 			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
 		},
 		{
 			name: "create: validation error from service", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, svcErr: fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount),
+			body: validBody, headers: withKey, svcErr: fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount),
 			wantStatus: http.StatusUnprocessableEntity, wantType: "invalid-amount", wantServiceCall: true,
 		},
 		{
 			name: "create: internal error", method: http.MethodPost, path: "/v1/payments",
-			body: validBody, svcErr: errors.New("db is down"),
+			body: validBody, headers: withKey, svcErr: errors.New("db is down"),
 			wantStatus: http.StatusInternalServerError, wantType: "about:blank", wantServiceCall: true,
 		},
 
@@ -103,14 +135,19 @@ func TestAPI(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &fakePaymentService{
-				payment: tt.svcPayment,
-				err:     tt.svcErr,
+				payment:  tt.svcPayment,
+				replayed: tt.svcReplayed,
+				err:      tt.svcErr,
 			}
 			log := zap.NewNop()
 			api := router.New(log, httptransport.NewPaymentHandler(svc, log))
 
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, strings.NewReader(tt.body))
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
 			rec := httptest.NewRecorder()
-			api.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, strings.NewReader(tt.body)))
+			api.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Fatalf("status: got %d, want %d; body: %s", rec.Code, tt.wantStatus, rec.Body.String())
@@ -124,8 +161,18 @@ func TestAPI(t *testing.T) {
 			if tt.wantType != "" {
 				assertProblemType(t, rec, tt.wantType)
 			}
-			if tt.method == http.MethodPost && tt.wantServiceCall != (svc.createCalls > 0) {
-				t.Errorf("service called %d times, want called: %v", svc.createCalls, tt.wantServiceCall)
+			if got := rec.Header().Get("Idempotent-Replayed") == "true"; got != tt.wantReplayed {
+				t.Errorf("Idempotent-Replayed header: got %v, want %v", got, tt.wantReplayed)
+			}
+			if tt.method == http.MethodPost {
+				if tt.wantServiceCall != (svc.createCalls > 0) {
+					t.Errorf("service called %d times, want called: %v", svc.createCalls, tt.wantServiceCall)
+				}
+				// Транспорт должен передать в сервис именно тот ключ, что пришёл в заголовке.
+				if tt.wantServiceCall && svc.lastCmd.IdempotencyKey != tt.headers["Idempotency-Key"] {
+					t.Errorf("idempotency key passed to service: got %q, want %q",
+						svc.lastCmd.IdempotencyKey, tt.headers["Idempotency-Key"])
+				}
 			}
 		})
 	}
@@ -153,6 +200,58 @@ func assertProblemType(t *testing.T, rec *httptest.ResponseRecorder, wantType st
 	if p.Type != want {
 		t.Errorf("problem type: got %q, want %q", p.Type, want)
 	}
+}
+
+// Повтор POST с тем же ключом через настоящие сервис и хранилище.
+func TestAPI_CreatePaymentIdempotency(t *testing.T) {
+	api := newRouter()
+	post := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/payments", strings.NewReader(body))
+		req.Header.Set("Idempotency-Key", "key-1")
+		rec := httptest.NewRecorder()
+		api.ServeHTTP(rec, req)
+		return rec
+	}
+	paymentID := func(rec *httptest.ResponseRecorder) string {
+		t.Helper()
+		var p struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+			t.Fatalf("decode payment: %v; body: %s", err, rec.Body.String())
+		}
+		return p.ID
+	}
+	body := `{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`
+
+	first := post(body)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first: status %d, want 201; body: %s", first.Code, first.Body.String())
+	}
+	if got := first.Header().Get(httptransport.IdempotentReplayedHeader); got != "" {
+		t.Errorf("first: %s = %q, want no header", httptransport.IdempotentReplayedHeader, got)
+	}
+
+	replay := post(body)
+	if replay.Code != http.StatusCreated {
+		t.Fatalf("replay: status %d, want 201; body: %s", replay.Code, replay.Body.String())
+	}
+	if got := replay.Header().Get(httptransport.IdempotentReplayedHeader); got != "true" {
+		t.Errorf("replay: %s = %q, want \"true\"", httptransport.IdempotentReplayedHeader, got)
+	}
+	if first, replay := paymentID(first), paymentID(replay); first != replay {
+		t.Errorf("replay created another payment: %s, first was %s", replay, first)
+	}
+	if got, want := replay.Header().Get("Location"), first.Header().Get("Location"); got != want {
+		t.Errorf("replay location: got %q, want %q", got, want)
+	}
+
+	reused := post(`{"merchant_id":"m-1","amount_minor":999,"currency":"RUB"}`)
+	if reused.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reused key: status %d, want 422; body: %s", reused.Code, reused.Body.String())
+	}
+	assertProblemType(t, reused, "idempotency-key-reused")
 }
 
 func TestRouter_Routes(t *testing.T) {
