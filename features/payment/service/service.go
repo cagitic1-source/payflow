@@ -45,6 +45,11 @@ type CreatePaymentCommand struct {
 type PaymentRepository interface {
 	Save(ctx context.Context, p paymentdomain.Payment) error
 	Get(ctx context.Context, id string) (paymentdomain.Payment, error)
+	Update(ctx context.Context, p paymentdomain.Payment) error
+	// UpdateIfStatus сохраняет p, только если в хранилище платёж сейчас
+	// в статусе from. Проверка и запись атомарны. Если статус другой,
+	// возвращает ошибку, оборачивающую paymenterrors.ErrInvalidTransition.
+	UpdateIfStatus(ctx context.Context, p paymentdomain.Payment, from paymentdomain.Status) error
 }
 
 // IdempotencyStore хранит ключи идемпотентности.

@@ -46,6 +46,29 @@ func (r *fakeRepo) Get(_ context.Context, id string) (paymentdomain.Payment, err
 	return paymentdomain.Payment{}, paymenterrors.ErrNotFound
 }
 
+func (r *fakeRepo) Update(_ context.Context, p paymentdomain.Payment) error {
+	for i := range r.saved {
+		if r.saved[i].ID == p.ID {
+			r.saved[i] = p
+			return nil
+		}
+	}
+	return fmt.Errorf("payment %s: %w", p.ID, paymenterrors.ErrNotFound)
+}
+
+func (r *fakeRepo) UpdateIfStatus(_ context.Context, p paymentdomain.Payment, from paymentdomain.Status) error {
+	for i := range r.saved {
+		if r.saved[i].ID == p.ID {
+			if r.saved[i].Status != from {
+				return fmt.Errorf("%w: payment %s is %s, want %s", paymenterrors.ErrInvalidTransition, p.ID, r.saved[i].Status, from)
+			}
+			r.saved[i] = p
+			return nil
+		}
+	}
+	return fmt.Errorf("payment %s: %w", p.ID, paymenterrors.ErrNotFound)
+}
+
 type fakeIdempotencyEntry struct {
 	fingerprint string
 	paymentID   string // пусто, пока операция выполняется
