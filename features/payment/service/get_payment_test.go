@@ -11,7 +11,7 @@ import (
 
 func TestGetPayment_EmptyID(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	_, err := svc.GetPayment(t.Context(), "")
 	if err == nil {
@@ -24,7 +24,7 @@ func TestGetPayment_EmptyID(t *testing.T) {
 
 func TestGetPayment_Found(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	created, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err != nil {
@@ -42,7 +42,7 @@ func TestGetPayment_Found(t *testing.T) {
 
 func TestGetPayment_NotFound(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	_, err := svc.GetPayment(t.Context(), "11111")
 	if !errors.Is(err, paymenterrors.ErrNotFound) {

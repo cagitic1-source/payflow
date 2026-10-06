@@ -24,7 +24,7 @@ import (
 
 func newRouter() http.Handler {
 	log := zap.NewNop()
-	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
+	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour), acceptQueue{})
 	return router.New(log, httptransport.NewPaymentHandler(svc, log))
 }
 

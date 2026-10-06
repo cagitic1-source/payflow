@@ -15,7 +15,7 @@ import (
 //	PAYFLOW_READ_TIMEOUT         server.Config.ReadTimeout
 //	PAYFLOW_WRITE_TIMEOUT        server.Config.WriteTimeout
 //	PAYFLOW_IDLE_TIMEOUT         server.Config.IdleTimeout
-//	PAYFLOW_SHUTDOWN_TIMEOUT     server.Config.ShutdownTimeout
+//	PAYFLOW_SHUTDOWN_TIMEOUT     server.Config.ShutdownTimeout, по умолчанию httpShutdownTimeout
 //
 // Таймауты задаются в формате time.ParseDuration ("10s", "1m"). Незаданная
 // или пустая переменная - значение по умолчанию из server.DefaultConfig.
@@ -29,6 +29,8 @@ func loadConfig() (config, error) {
 		addr:   ":8080",
 		server: server.DefaultConfig(),
 	}
+	// Укладываемся в бюджет остановки, см. httpShutdownTimeout в main.go.
+	c.server.ShutdownTimeout = httpShutdownTimeout
 	if v := os.Getenv("PAYFLOW_ADDR"); v != "" {
 		c.addr = v
 	}

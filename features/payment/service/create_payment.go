@@ -47,10 +47,25 @@ func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCom
 		}
 	}()
 
+	// Место в очереди занимаем до сохранения: если мест нет, ничего не сохраняем.
+	if !s.queue.TryAcquire() {
+		return CreatePaymentResult{}, paymenterrors.ErrOverloaded
+	}
+
+	enqueued := false
+	defer func() {
+		if !enqueued {
+			s.queue.Release()
+		}
+	}()
+
 	if err := s.payments.Save(ctx, p); err != nil {
 		return CreatePaymentResult{}, fmt.Errorf("save payment: %w", err)
 	}
 	saved = true
+
+	s.queue.Enqueue(p.ID)
+	enqueued = true
 
 	if err := s.idempotency.Complete(ctx, key, p.ID); err != nil {
 		return CreatePaymentResult{}, fmt.Errorf("complete payment: %w", err)

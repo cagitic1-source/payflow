@@ -17,7 +17,7 @@ import (
 )
 
 func newService() *service.PaymentService {
-	return service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
+	return service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour), acceptQueue{})
 }
 
 func newMux(svc httptransport.PaymentService) *http.ServeMux {

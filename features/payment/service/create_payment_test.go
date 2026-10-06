@@ -13,7 +13,7 @@ import (
 
 func TestCreatePayment_Success(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	p, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err != nil {
@@ -42,7 +42,7 @@ func TestCreatePayment_Success(t *testing.T) {
 func TestCreatePayment_UsesServiceClock(t *testing.T) {
 	now := time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 	svc.SetNow(func() time.Time { return now })
 
 	p, err := svc.CreatePayment(t.Context(), validPaymentCommand())
@@ -63,7 +63,7 @@ func TestCreatePayment_UsesServiceClock(t *testing.T) {
 func TestCreatePayment_RepositoryError(t *testing.T) {
 	errDB := errors.New("db is down")
 	repo := &fakeRepo{saveErr: errDB}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	_, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err == nil {
@@ -76,7 +76,7 @@ func TestCreatePayment_RepositoryError(t *testing.T) {
 
 func TestCreatePayment_UniqueIDs(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 	p1, err1 := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err1 != nil {
@@ -126,7 +126,7 @@ func TestCreatePayment_ValidationError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &fakeRepo{}
-			svc := service.NewPaymentService(repo, &fakeIdempotencyStore{})
+			svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
 
 			p, err := svc.CreatePayment(t.Context(), tt.cmd)
 

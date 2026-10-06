@@ -16,6 +16,7 @@ import (
 type PaymentService struct {
 	payments    PaymentRepository
 	idempotency IdempotencyStore
+	queue       PaymentQueue
 	now         func() time.Time // в тестах подменяется
 }
 
@@ -52,6 +53,13 @@ type PaymentRepository interface {
 	UpdateIfStatus(ctx context.Context, p paymentdomain.Payment, from paymentdomain.Status) error
 }
 
+// PaymentQueue - очередь платежей на обработку с ограниченным числом мест.
+type PaymentQueue interface {
+	TryAcquire() bool // занять место; false - мест нет
+	Release()         // вернуть место, если платёж не попал в очередь
+	Enqueue(id string)
+}
+
 // IdempotencyStore хранит ключи идемпотентности.
 type IdempotencyStore interface {
 	// Reserve атомарно занимает ключ. Если операция с этим ключом уже завершена
@@ -80,10 +88,11 @@ type Acquirer interface {
 
 // NewPaymentService создаёт сервис поверх репозитория платежей и хранилища
 // ключей идемпотентности.
-func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore) *PaymentService {
+func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore, queue PaymentQueue) *PaymentService {
 	return &PaymentService{
 		payments:    payments,
 		idempotency: idempotency,
+		queue:       queue,
 		now:         time.Now,
 	}
 }

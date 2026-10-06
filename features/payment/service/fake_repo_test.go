@@ -15,6 +15,7 @@ import (
 var (
 	_ service.PaymentRepository = (*fakeRepo)(nil)
 	_ service.IdempotencyStore  = (*fakeIdempotencyStore)(nil)
+	_ service.PaymentQueue      = (*fakeQueue)(nil)
 )
 
 type fakeRepo struct {
@@ -135,6 +136,42 @@ func (s *fakeIdempotencyStore) Release(_ context.Context, key service.Idempotenc
 		delete(s.entries, key)
 	}
 	return nil
+}
+
+// fakeQueue повторяет контракт service.PaymentQueue и запоминает вызовы.
+// Нулевое значение готово к работе и принимает любой платёж.
+type fakeQueue struct {
+	mu           sync.Mutex
+	full         bool     // если true, TryAcquire отказывает
+	acquired     int      // сколько мест занято и ещё не возвращено
+	enqueued     []string // id платежей в порядке постановки в очередь
+	releaseCalls int
+}
+
+func (q *fakeQueue) TryAcquire() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.full {
+		return false
+	}
+	q.acquired++
+	return true
+}
+
+func (q *fakeQueue) Release() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.releaseCalls++
+	q.acquired--
+}
+
+func (q *fakeQueue) Enqueue(id string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	q.enqueued = append(q.enqueued, id)
 }
 
 func validPaymentCommand() service.CreatePaymentCommand {
