@@ -40,3 +40,8 @@ var (
 	// ErrEmptyFailureReason - отказ или ошибка без причины.
 	ErrEmptyFailureReason = errors.New("failure reason is empty")
 )
+
+var (
+	// ErrUnavailable - эквайер не ответил из-за технического сбоя.
+	ErrUnavailable = errors.New("acquirer unavailable")
+)

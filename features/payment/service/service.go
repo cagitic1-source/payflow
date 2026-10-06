@@ -60,6 +60,19 @@ type IdempotencyStore interface {
 	Release(ctx context.Context, key IdempotencyKey) error
 }
 
+// Decision - ответ эквайера на запрос авторизации.
+type Decision struct {
+	Approved bool
+	Reason   string // причина отказа; пусто, если одобрено
+}
+
+// Acquirer авторизует платёж у банка-эквайера.
+// Отказ банка - это Decision с Approved == false и причиной.
+// Ошибка - банк не ответил: paymenterrors.ErrUnavailable или ошибка ctx.
+type Acquirer interface {
+	Authorize(ctx context.Context, p paymentdomain.Payment) (Decision, error)
+}
+
 // NewPaymentService создаёт сервис поверх репозитория платежей и хранилища
 // ключей идемпотентности.
 func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore) *PaymentService {
