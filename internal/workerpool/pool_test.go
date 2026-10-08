@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -193,5 +194,80 @@ func TestPool_RejectsAfterStop(t *testing.T) {
 
 	if p.TryAcquire() {
 		t.Fatal("TryAcquire succeeded after Stop")
+	}
+}
+
+// Производители занимают места и ставят задачи, пока два Stop одновременно
+// закрывают пул. Если TryAcquire или Enqueue читают closed без блокировки,
+// тест падает под -race (или паникует на отправке в закрытый канал).
+// В конце ни одно место не должно остаться занятым.
+func TestPool_ConcurrentEnqueueAndStop(t *testing.T) {
+	const (
+		iterations = 300
+		producers  = 8
+		attempts   = 50 // попыток TryAcquire у каждого производителя
+	)
+	for i := range iterations {
+		var handled atomic.Int64
+		p := New(4, 16, func(context.Context, string) { handled.Add(1) }, zap.NewNop())
+
+		var acquired atomic.Int64
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+		for w := range producers {
+			wg.Go(func() {
+				<-start
+				for j := range attempts {
+					if p.TryAcquire() {
+						acquired.Add(1)
+						p.Enqueue(fmt.Sprintf("job-%d-%d", w, j))
+					}
+				}
+			})
+		}
+		for range 2 {
+			wg.Go(func() {
+				<-start
+				// Сдвигаем Stop на разное число переключений, чтобы от итерации
+				// к итерации он попадал в разные места между TryAcquire и Enqueue.
+				for range i % 16 {
+					runtime.Gosched()
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				defer cancel()
+				if err := p.Stop(ctx); err != nil {
+					t.Errorf("stop: %v", err)
+				}
+			})
+		}
+		close(start)
+		wg.Wait()
+
+		if n := len(p.slots); n != 0 {
+			t.Fatalf("iteration %d: %d slots leaked", i, n)
+		}
+		if h, a := handled.Load(), acquired.Load(); h > a {
+			t.Fatalf("iteration %d: handled %d jobs, but only %d slots were acquired", i, h, a)
+		}
+	}
+}
+
+// Пул остановили между TryAcquire и Enqueue: задача не обрабатывается,
+// а занятое под неё место возвращается.
+func TestPool_EnqueueAfterStopReturnsSlot(t *testing.T) {
+	var called atomic.Bool
+	p := New(1, 1, func(context.Context, string) { called.Store(true) }, zap.NewNop())
+
+	if !p.TryAcquire() {
+		t.Fatal("no slot")
+	}
+	stop(t, p)
+	p.Enqueue("late")
+
+	if called.Load() {
+		t.Error("handler called for a job enqueued after Stop")
+	}
+	if n := len(p.slots); n != 0 {
+		t.Errorf("%d slots taken after Stop, want 0", n)
 	}
 }
