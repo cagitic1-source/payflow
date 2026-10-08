@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -17,6 +18,9 @@ var (
 	_ service.IdempotencyStore  = (*fakeIdempotencyStore)(nil)
 	_ service.PaymentQueue      = (*fakeQueue)(nil)
 )
+
+// errQueueStopped возвращает fakeQueue.Enqueue, когда очередь остановлена.
+var errQueueStopped = errors.New("queue is stopped")
 
 type fakeRepo struct {
 	saved    []paymentdomain.Payment
@@ -143,6 +147,7 @@ func (s *fakeIdempotencyStore) Release(_ context.Context, key service.Idempotenc
 type fakeQueue struct {
 	mu           sync.Mutex
 	full         bool     // если true, TryAcquire отказывает
+	stopped      bool     // если true, Enqueue отказывает и сам возвращает место
 	acquired     int      // сколько мест занято и ещё не возвращено
 	enqueued     []string // id платежей в порядке постановки в очередь
 	releaseCalls int
@@ -167,11 +172,16 @@ func (q *fakeQueue) Release() {
 	q.acquired--
 }
 
-func (q *fakeQueue) Enqueue(id string) {
+func (q *fakeQueue) Enqueue(id string) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	if q.stopped {
+		q.acquired--
+		return errQueueStopped
+	}
 	q.enqueued = append(q.enqueued, id)
+	return nil
 }
 
 func validPaymentCommand() service.CreatePaymentCommand {

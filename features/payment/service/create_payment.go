@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"uuid"
 
+	"go.uber.org/zap"
+
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
 )
@@ -64,8 +66,15 @@ func (s *PaymentService) CreatePayment(ctx context.Context, cmd CreatePaymentCom
 	}
 	saved = true
 
-	s.queue.Enqueue(p.ID)
+	// Место переходит очереди и при ошибке: его вернёт воркер или сам Enqueue.
+	// Повторный Release освободил бы чужое место.
 	enqueued = true
+	if err := s.queue.Enqueue(p.ID); err != nil {
+		// Сервис останавливается. Платёж уже сохранён в pending и считается
+		// принятым: после перехода на PostgreSQL его подберёт восстановление.
+		s.logger(ctx).Error("payment saved but not enqueued",
+			zap.String("payment_id", p.ID), zap.Error(err))
+	}
 
 	if err := s.idempotency.Complete(ctx, key, p.ID); err != nil {
 		return CreatePaymentResult{}, fmt.Errorf("complete payment: %w", err)

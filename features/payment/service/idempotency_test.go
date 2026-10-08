@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
@@ -17,7 +19,7 @@ func command(key string, amount int64) service.CreatePaymentCommand {
 
 func TestCreatePayment_EmptyIdempotencyKey(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	cmd := validPaymentCommand()
 	cmd.IdempotencyKey = ""
@@ -33,7 +35,7 @@ func TestCreatePayment_EmptyIdempotencyKey(t *testing.T) {
 func TestCreatePayment_Replay(t *testing.T) {
 	repo := &fakeRepo{}
 	idem := &fakeIdempotencyStore{}
-	svc := service.NewPaymentService(repo, idem, &fakeQueue{})
+	svc := service.NewPaymentService(repo, idem, &fakeQueue{}, zap.NewNop())
 
 	first, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err != nil {
@@ -67,7 +69,7 @@ func TestCreatePayment_Replay(t *testing.T) {
 
 func TestCreatePayment_KeyReusedWithDifferentRequest(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	if _, err := svc.CreatePayment(t.Context(), command("k1", 100)); err != nil {
 		t.Fatalf("first: %v", err)
@@ -83,7 +85,7 @@ func TestCreatePayment_KeyReusedWithDifferentRequest(t *testing.T) {
 
 func TestCreatePayment_KeysScopedByMerchant(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	p1, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err != nil {
@@ -103,7 +105,7 @@ func TestCreatePayment_KeysScopedByMerchant(t *testing.T) {
 }
 
 func TestCreatePayment_InvalidRequestDoesNotOccupyKey(t *testing.T) {
-	svc := service.NewPaymentService(&fakeRepo{}, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(&fakeRepo{}, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	_, err := svc.CreatePayment(t.Context(), command("k1", -5))
 	if !errors.Is(err, paymenterrors.ErrValidation) {
@@ -123,7 +125,7 @@ func TestCreatePayment_InvalidRequestDoesNotOccupyKey(t *testing.T) {
 func TestCreatePayment_ReserveError(t *testing.T) {
 	repo := &fakeRepo{}
 	idem := &fakeIdempotencyStore{reserveErr: paymenterrors.ErrIdempotencyInProgress}
-	svc := service.NewPaymentService(repo, idem, &fakeQueue{})
+	svc := service.NewPaymentService(repo, idem, &fakeQueue{}, zap.NewNop())
 
 	_, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if !errors.Is(err, paymenterrors.ErrIdempotencyInProgress) {
@@ -141,7 +143,7 @@ func TestCreatePayment_ReserveError(t *testing.T) {
 func TestCreatePayment_SaveFailureReleasesKey(t *testing.T) {
 	repo := &fakeRepo{saveErr: errors.New("db is down")}
 	idem := &fakeIdempotencyStore{}
-	svc := service.NewPaymentService(repo, idem, &fakeQueue{})
+	svc := service.NewPaymentService(repo, idem, &fakeQueue{}, zap.NewNop())
 
 	if _, err := svc.CreatePayment(t.Context(), command("k1", 100)); err == nil {
 		t.Fatal("want save error, got nil")
@@ -168,7 +170,7 @@ func TestCreatePayment_CompleteFailureKeepsKeyReserved(t *testing.T) {
 	errStore := errors.New("idempotency storage is down")
 	repo := &fakeRepo{}
 	idem := &fakeIdempotencyStore{completeErr: errStore}
-	svc := service.NewPaymentService(repo, idem, &fakeQueue{})
+	svc := service.NewPaymentService(repo, idem, &fakeQueue{}, zap.NewNop())
 
 	if _, err := svc.CreatePayment(t.Context(), command("k1", 100)); !errors.Is(err, errStore) {
 		t.Fatalf("want %v, got %v", errStore, err)
@@ -190,7 +192,7 @@ func TestCreatePayment_CompleteFailureKeepsKeyReserved(t *testing.T) {
 
 func TestCreatePayment_ConcurrentSameKey(t *testing.T) {
 	// Здесь настоящий репозиторий: fakeRepo не защищён от конкурентного доступа.
-	svc := service.NewPaymentService(memory.NewPaymentRepository(), &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(memory.NewPaymentRepository(), &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 	const n = 50
 
 	type result struct {

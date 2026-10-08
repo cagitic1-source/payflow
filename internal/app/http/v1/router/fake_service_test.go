@@ -29,6 +29,6 @@ func (s *fakePaymentService) GetPayment(_ context.Context, _ string) (paymentdom
 // Этим тестам важен HTTP, а не обработка платежей.
 type acceptQueue struct{}
 
-func (acceptQueue) TryAcquire() bool { return true }
-func (acceptQueue) Release()         {}
-func (acceptQueue) Enqueue(string)   {}
+func (acceptQueue) TryAcquire() bool     { return true }
+func (acceptQueue) Release()             {}
+func (acceptQueue) Enqueue(string) error { return nil }

@@ -19,7 +19,9 @@ func submit(t *testing.T, p *Pool, id string) {
 	if !p.TryAcquire() {
 		t.Fatalf("no slot for %s", id)
 	}
-	p.Enqueue(id)
+	if err := p.Enqueue(id); err != nil {
+		t.Fatalf("enqueue %s: %v", id, err)
+	}
 }
 
 func stop(t *testing.T, p *Pool) {
@@ -180,7 +182,9 @@ func TestPool_PanicDoesNotKillWorkerOrLeakSlot(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	p.Enqueue("ok")
+	if err := p.Enqueue("ok"); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
 	stop(t, p)
 
 	if processed.Load() != 1 {
@@ -220,7 +224,10 @@ func TestPool_ConcurrentEnqueueAndStop(t *testing.T) {
 				for j := range attempts {
 					if p.TryAcquire() {
 						acquired.Add(1)
-						p.Enqueue(fmt.Sprintf("job-%d-%d", w, j))
+						// ErrStopped допустим: Stop успел между TryAcquire и Enqueue.
+						if err := p.Enqueue(fmt.Sprintf("job-%d-%d", w, j)); err != nil && !errors.Is(err, ErrStopped) {
+							t.Errorf("enqueue: %v", err)
+						}
 					}
 				}
 			})
@@ -253,7 +260,7 @@ func TestPool_ConcurrentEnqueueAndStop(t *testing.T) {
 }
 
 // Пул остановили между TryAcquire и Enqueue: задача не обрабатывается,
-// а занятое под неё место возвращается.
+// Enqueue сообщает об этом ErrStopped, а занятое под неё место возвращается.
 func TestPool_EnqueueAfterStopReturnsSlot(t *testing.T) {
 	var called atomic.Bool
 	p := New(1, 1, func(context.Context, string) { called.Store(true) }, zap.NewNop())
@@ -262,7 +269,9 @@ func TestPool_EnqueueAfterStopReturnsSlot(t *testing.T) {
 		t.Fatal("no slot")
 	}
 	stop(t, p)
-	p.Enqueue("late")
+	if err := p.Enqueue("late"); !errors.Is(err, ErrStopped) {
+		t.Errorf("enqueue after Stop: got %v, want ErrStopped", err)
+	}
 
 	if called.Load() {
 		t.Error("handler called for a job enqueued after Stop")

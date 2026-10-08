@@ -76,13 +76,15 @@ func run() error {
 
 	go idempotency.RunCleanup(ctx, idempotencyCleanupInterval)
 
-	svc := service.NewPaymentService(repo, idempotency, pool)
+	svc := service.NewPaymentService(repo, idempotency, pool, logger)
 	handler := router.New(logger, httptransport.NewPaymentHandler(svc, logger))
 
 	serverErr := server.Run(ctx, ln, handler, cfg.server, logger)
 
 	// Порядок остановки: HTTP-сервер уже не принимает запросы - значит,
-	// новых платежей не будет. Теперь дорабатываем очередь.
+	// новых платежей не будет. Теперь дорабатываем очередь. Если Shutdown
+	// не уложился в таймаут, оставшиеся обработчики ещё могут дойти до
+	// Enqueue: пул вернёт им ErrStopped, и сервис запишет это в лог.
 	stopCtx, cancel := context.WithTimeout(context.Background(), poolStopTimeout)
 	defer cancel()
 	if err := pool.Stop(stopCtx); err != nil {

@@ -3,10 +3,14 @@ package workerpool
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"go.uber.org/zap"
 )
+
+// ErrStopped - пул остановлен, задача не принята.
+var ErrStopped = errors.New("worker pool is stopped")
 
 // Handler обрабатывает одну задачу. Должен уважать ctx: при принудительной
 // остановке пула ctx отменяется, и обработчик обязан быстро завершиться.
@@ -68,18 +72,20 @@ func (p *Pool) TryAcquire() bool {
 	}
 }
 
-// Enqueue ставит задачу в очередь. Вызывать только после успешного TryAcquire:
-// место за задачей уже закреплено, поэтому отправка не блокируется.
-func (p *Pool) Enqueue(id string) {
+// Enqueue ставит задачу в очередь. Вызывать только после успешного TryAcquire.
+// Место переходит пулу в любом случае: после обработки его вернёт воркер,
+// а если пул уже остановлен - сам Enqueue, вместе с ErrStopped.
+func (p *Pool) Enqueue(id string) error {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if p.closed {
 		// Пул остановили между TryAcquire и Enqueue: задача не будет
 		// обработана, место нужно вернуть.
 		p.Release()
-		return
+		return ErrStopped
 	}
 	p.queue <- id
+	return nil
 }
 
 // Stop перестаёт принимать задачи и ждёт, пока воркеры обработают очередь.

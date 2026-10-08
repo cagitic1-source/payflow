@@ -8,7 +8,10 @@ import (
 	"encoding/json"
 	"time"
 
+	"go.uber.org/zap"
+
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
+	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
 // PaymentService реализует сценарии работы с платежами: создание и получение.
@@ -17,6 +20,7 @@ type PaymentService struct {
 	payments    PaymentRepository
 	idempotency IdempotencyStore
 	queue       PaymentQueue
+	log         *zap.Logger      // если в ctx нет логгера запроса
 	now         func() time.Time // в тестах подменяется
 }
 
@@ -57,7 +61,9 @@ type PaymentRepository interface {
 type PaymentQueue interface {
 	TryAcquire() bool // занять место; false - мест нет
 	Release()         // вернуть место, если платёж не попал в очередь
-	Enqueue(id string)
+	// Enqueue ставит платёж в очередь. Место переходит очереди даже при
+	// ошибке, поэтому Release после Enqueue вызывать нельзя.
+	Enqueue(id string) error
 }
 
 // IdempotencyStore хранит ключи идемпотентности.
@@ -88,13 +94,27 @@ type Acquirer interface {
 
 // NewPaymentService создаёт сервис поверх репозитория платежей и хранилища
 // ключей идемпотентности.
-func NewPaymentService(payments PaymentRepository, idempotency IdempotencyStore, queue PaymentQueue) *PaymentService {
+func NewPaymentService(
+	payments PaymentRepository,
+	idempotency IdempotencyStore,
+	queue PaymentQueue,
+	log *zap.Logger) *PaymentService {
 	return &PaymentService{
 		payments:    payments,
 		idempotency: idempotency,
 		queue:       queue,
+		log:         log,
 		now:         time.Now,
 	}
+}
+
+// logger возвращает логгер запроса из ctx (с request_id), а если его там
+// нет - логгер сервиса.
+func (s *PaymentService) logger(ctx context.Context) *zap.Logger {
+	if log := requestctx.Logger(ctx); log != nil {
+		return log
+	}
+	return s.log
 }
 
 // fingerprint - отпечаток бизнес-содержимого запроса.

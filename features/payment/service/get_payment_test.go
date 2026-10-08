@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"go.uber.org/zap"
+
 	"github.com/cagitic1-source/payflow/features/payment/service"
 
 	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
@@ -11,7 +13,7 @@ import (
 
 func TestGetPayment_EmptyID(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	_, err := svc.GetPayment(t.Context(), "")
 	if err == nil {
@@ -24,7 +26,7 @@ func TestGetPayment_EmptyID(t *testing.T) {
 
 func TestGetPayment_Found(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	created, err := svc.CreatePayment(t.Context(), validPaymentCommand())
 	if err != nil {
@@ -42,7 +44,7 @@ func TestGetPayment_Found(t *testing.T) {
 
 func TestGetPayment_NotFound(t *testing.T) {
 	repo := &fakeRepo{}
-	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{})
+	svc := service.NewPaymentService(repo, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
 
 	_, err := svc.GetPayment(t.Context(), "11111")
 	if !errors.Is(err, paymenterrors.ErrNotFound) {
