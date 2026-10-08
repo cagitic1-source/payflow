@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // Status - состояние платежа. Платёж создаётся в StatusPending, а дальше

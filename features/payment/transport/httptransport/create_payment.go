@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"go.uber.org/zap"
+
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // CreatePayment обрабатывает POST /v1/payments: создаёт платёж и отвечает 202
@@ -43,6 +45,11 @@ func (h *PaymentHandler) CreatePayment(w http.ResponseWriter, r *http.Request) {
 		respondError(w, r, h.log, err)
 		return
 	}
+
+	log := requestLogger(r, h.log)
+	log.Info("payment accepted",
+		zap.String("payment_id", res.Payment.ID),
+		zap.Bool("replayed", res.Replayed))
 
 	if res.Replayed {
 		w.Header().Set(IdempotentReplayedHeader, "true")

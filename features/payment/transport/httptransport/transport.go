@@ -3,11 +3,13 @@ package httptransport
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"go.uber.org/zap"
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
+	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
 const idempotencyKeyHeader = "Idempotency-Key"
@@ -37,10 +39,19 @@ type PaymentService interface {
 }
 
 // NewPaymentHandler создаёт обработчики поверх сервиса платежей.
-// В log пишутся внутренние ошибки (5xx) и сбои записи ответа.
 func NewPaymentHandler(paymentService PaymentService, log *zap.Logger) *PaymentHandler {
 	return &PaymentHandler{
 		svc: paymentService,
 		log: log,
 	}
+}
+
+// requestLogger возвращает логгер запроса с полем request_id, который кладёт
+// middleware.RequestID. Если его нет (например, в тестах без middleware),
+// возвращает fallback.
+func requestLogger(r *http.Request, fallback *zap.Logger) *zap.Logger {
+	if log := requestctx.Logger(r.Context()); log != nil {
+		return log
+	}
+	return fallback
 }

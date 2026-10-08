@@ -24,3 +24,11 @@ func (s *fakePaymentService) CreatePayment(_ context.Context, cmd service.Create
 func (s *fakePaymentService) GetPayment(_ context.Context, _ string) (paymentdomain.Payment, error) {
 	return s.payment, s.err
 }
+
+// acceptQueue - очередь, которая принимает любой платёж и никуда его не передаёт.
+// Этим тестам важен HTTP, а не обработка платежей.
+type acceptQueue struct{}
+
+func (acceptQueue) TryAcquire() bool     { return true }
+func (acceptQueue) Release()             {}
+func (acceptQueue) Enqueue(string) error { return nil }

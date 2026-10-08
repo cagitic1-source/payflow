@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 type idempotencyEntry struct {

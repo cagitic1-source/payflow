@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 func TestPaymentTransitions(t *testing.T) {

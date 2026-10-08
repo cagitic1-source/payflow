@@ -68,6 +68,9 @@ func Run(ctx context.Context, ln net.Listener, handler http.Handler, cfg Config,
 	defer cancel()
 
 	if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+		if err := srv.Close(); err != nil {
+			return fmt.Errorf("server closed and failed shutdown: %w", err)
+		}
 		return fmt.Errorf("shutdown: %w", shutdownErr)
 	}
 

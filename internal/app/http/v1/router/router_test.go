@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
@@ -19,12 +21,12 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/middleware"
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 func newRouter() http.Handler {
 	log := zap.NewNop()
-	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour))
+	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour), acceptQueue{}, zap.NewNop())
 	return router.New(log, httptransport.NewPaymentHandler(svc, log))
 }
 
@@ -345,5 +347,67 @@ func TestRouter_KeepsIncomingRequestID(t *testing.T) {
 
 	if got := rec.Header().Get(middleware.RequestIDHeader); got != "req-123" {
 		t.Errorf("want request id req-123, got %q", got)
+	}
+}
+
+// Ошибки логируются логгером запроса: по request_id из ответа запись
+// находится в логах. Уровень зависит от статуса.
+func TestAPI_ErrorLogsCarryRequestID(t *testing.T) {
+	tests := []struct {
+		name      string
+		svcErr    error
+		wantLevel zapcore.Level
+		wantMsg   string
+	}{
+		{"503 overloaded", paymenterrors.ErrOverloaded, zap.WarnLevel, "request rejected"},
+		{"500 internal", errors.New("db is down"), zap.ErrorLevel, "request failed"},
+		{"422 validation", fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount), zap.InfoLevel, "request rejected"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// DebugLevel: иначе observer сам отбросит Info/Warn и уровень не проверится.
+			core, logs := observer.New(zap.DebugLevel)
+			log := zap.New(core)
+			api := router.New(log, httptransport.NewPaymentHandler(&fakePaymentService{err: tt.svcErr}, log))
+
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/payments",
+				strings.NewReader(`{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`))
+			req.Header.Set("Idempotency-Key", "k1")
+			req.Header.Set(middleware.RequestIDHeader, "req-123")
+			api.ServeHTTP(httptest.NewRecorder(), req)
+
+			entries := logs.FilterMessage(tt.wantMsg).All()
+			if len(entries) != 1 {
+				t.Fatalf("want one %q entry, got %+v", tt.wantMsg, logs.All())
+			}
+			if got := entries[0].Level; got != tt.wantLevel {
+				t.Errorf("level = %s, want %s", got, tt.wantLevel)
+			}
+			if got := entries[0].ContextMap()["request_id"]; got != "req-123" {
+				t.Errorf("request_id = %v, want req-123", got)
+			}
+		})
+	}
+}
+
+func TestAPI_CreateLogsPaymentID(t *testing.T) {
+	core, logs := observer.New(zap.DebugLevel)
+	log := zap.New(core)
+	svc := &fakePaymentService{payment: paymentdomain.Payment{ID: "pay-1", Status: paymentdomain.StatusPending}}
+	api := router.New(log, httptransport.NewPaymentHandler(svc, log))
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/payments",
+		strings.NewReader(`{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`))
+	req.Header.Set("Idempotency-Key", "k1")
+	req.Header.Set(middleware.RequestIDHeader, "req-123")
+	api.ServeHTTP(httptest.NewRecorder(), req)
+
+	entries := logs.FilterMessage("payment accepted").All()
+	if len(entries) != 1 {
+		t.Fatalf("want one \"payment accepted\" entry, got %+v", logs.All())
+	}
+	ctx := entries[0].ContextMap()
+	if ctx["request_id"] != "req-123" || ctx["payment_id"] != "pay-1" {
+		t.Errorf("want request_id=req-123 and payment_id=pay-1, got %v", ctx)
 	}
 }

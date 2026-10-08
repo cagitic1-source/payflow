@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 
@@ -69,13 +69,15 @@ var problemSpecs = []problemSpec{
 		detail: "Idempotency-Key was already used with a different request body",
 	},
 
-	// --- 409 ---
+	// --- 503 ---
 	{
 		err: paymenterrors.ErrOverloaded, status: http.StatusServiceUnavailable,
 		slug: "service-overloaded", title: "Service overloaded",
 		detail:     "the service cannot accept payments right now, retry later",
 		retryAfter: "1",
 	},
+
+	// --- 409 ---
 	{
 		err: paymenterrors.ErrIdempotencyInProgress, status: http.StatusConflict,
 		slug: "idempotency-request-in-progress", title: "Request in progress",
@@ -135,20 +137,24 @@ func respondError(w http.ResponseWriter, r *http.Request, log *zap.Logger, err e
 	p := problemFromError(err)
 	p.Instance = r.URL.Path
 
-	if p.Status >= http.StatusInternalServerError {
-		fields := []zap.Field{
-			zap.String("method", r.Method),
-			zap.String("url", r.URL.String()),
-			zap.Int("status", p.Status),
-			zap.Error(err),
-		}
-		// 503 - штатный отказ при перегрузке, а не сбой сервиса.
-		if p.Status == http.StatusServiceUnavailable {
-			log.Warn("request rejected", fields...)
-		} else {
-			log.Error("request failed", fields...)
-		}
+	log = requestLogger(r, log)
+	fields := []zap.Field{
+		zap.String("method", r.Method),
+		zap.String("url", r.URL.String()),
+		zap.Int("status", p.Status),
+		zap.Error(err),
 	}
+	switch {
+	case p.Status == http.StatusServiceUnavailable:
+		// 503 - штатный отказ при перегрузке, а не сбой сервиса.
+		log.Warn("request rejected", fields...)
+	case p.Status >= http.StatusInternalServerError:
+		log.Error("request failed", fields...)
+	default:
+		// 4xx - ошибка клиента, не наша: Info, чтобы не будить дежурных.
+		log.Info("request rejected", fields...)
+	}
+
 	if p.retryAfter != "" {
 		w.Header().Set("Retry-After", p.retryAfter)
 	}
