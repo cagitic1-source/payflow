@@ -10,6 +10,7 @@ import (
 
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
+	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
 	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
@@ -237,5 +238,32 @@ func TestCreatePayment_ConcurrentSameKey(t *testing.T) {
 	}
 	if len(ids) != 1 {
 		t.Errorf("all successful responses must carry the same payment, got %d different ids", len(ids))
+	}
+}
+
+// cancelOnSave отменяет ctx запроса прямо во время Save - как клиент,
+// который отключился, пока платёж сохранялся.
+type cancelOnSave struct {
+	*fakeRepo
+	cancel context.CancelFunc
+}
+
+func (r cancelOnSave) Save(ctx context.Context, p paymentdomain.Payment) error {
+	r.cancel()
+	return r.fakeRepo.Save(ctx, p) // вернёт ctx.Err()
+}
+
+// Ключ освобождается и на отменённом ctx, иначе повтор с тем же ключом
+// получал бы 409 до истечения ключа.
+func TestCreatePayment_CanceledRequestReleasesKey(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	svc := service.NewPaymentService(cancelOnSave{&fakeRepo{}, cancel}, &fakeIdempotencyStore{}, &fakeQueue{}, zap.NewNop())
+
+	if _, err := svc.CreatePayment(ctx, command("k1", 100)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if _, err := svc.CreatePayment(t.Context(), command("k1", 100)); err != nil {
+		t.Fatalf("retry with the same key: %v", err)
 	}
 }

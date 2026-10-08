@@ -22,6 +22,9 @@ var (
 // errQueueStopped возвращает fakeQueue.Enqueue, когда очередь остановлена.
 var errQueueStopped = errors.New("queue is stopped")
 
+// fakeRepo - хранилище платежей для тестов сервиса. Как и база, на
+// отменённом ctx ничего не читает и не пишет, а возвращает ctx.Err():
+// иначе тесты не заметят, что в хранилище передали не тот контекст.
 type fakeRepo struct {
 	saved    []paymentdomain.Payment
 	saveErr  error // если задан, Save вернёт его
@@ -29,7 +32,10 @@ type fakeRepo struct {
 	getCalls int
 }
 
-func (r *fakeRepo) Save(_ context.Context, p paymentdomain.Payment) error {
+func (r *fakeRepo) Save(ctx context.Context, p paymentdomain.Payment) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if r.saveErr != nil {
 		return r.saveErr
 	}
@@ -37,7 +43,11 @@ func (r *fakeRepo) Save(_ context.Context, p paymentdomain.Payment) error {
 	return nil
 }
 
-func (r *fakeRepo) Get(_ context.Context, id string) (paymentdomain.Payment, error) {
+func (r *fakeRepo) Get(ctx context.Context, id string) (paymentdomain.Payment, error) {
+	if err := ctx.Err(); err != nil {
+		return paymentdomain.Payment{}, err
+	}
+
 	r.getCalls++
 	if r.getErr != nil {
 		return paymentdomain.Payment{}, r.getErr
@@ -51,7 +61,11 @@ func (r *fakeRepo) Get(_ context.Context, id string) (paymentdomain.Payment, err
 	return paymentdomain.Payment{}, paymenterrors.ErrNotFound
 }
 
-func (r *fakeRepo) Update(_ context.Context, p paymentdomain.Payment) error {
+func (r *fakeRepo) Update(ctx context.Context, p paymentdomain.Payment) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	for i := range r.saved {
 		if r.saved[i].ID == p.ID {
 			r.saved[i] = p
@@ -61,7 +75,11 @@ func (r *fakeRepo) Update(_ context.Context, p paymentdomain.Payment) error {
 	return fmt.Errorf("payment %s: %w", p.ID, paymenterrors.ErrNotFound)
 }
 
-func (r *fakeRepo) UpdateIfStatus(_ context.Context, p paymentdomain.Payment, from paymentdomain.Status) error {
+func (r *fakeRepo) UpdateIfStatus(ctx context.Context, p paymentdomain.Payment, from paymentdomain.Status) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	for i := range r.saved {
 		if r.saved[i].ID == p.ID {
 			if r.saved[i].Status != from {
@@ -80,6 +98,7 @@ type fakeIdempotencyEntry struct {
 }
 
 // fakeIdempotencyStore повторяет контракт service.IdempotencyStore без TTL.
+// Как и fakeRepo, на отменённом ctx возвращает ctx.Err().
 // Нулевое значение готово к работе.
 type fakeIdempotencyStore struct {
 	mu           sync.RWMutex
@@ -89,7 +108,10 @@ type fakeIdempotencyStore struct {
 	releaseCalls int
 }
 
-func (s *fakeIdempotencyStore) Reserve(_ context.Context, key service.IdempotencyKey, fingerprint string) (string, error) {
+func (s *fakeIdempotencyStore) Reserve(ctx context.Context, key service.IdempotencyKey, fingerprint string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -114,7 +136,10 @@ func (s *fakeIdempotencyStore) Reserve(_ context.Context, key service.Idempotenc
 	}
 }
 
-func (s *fakeIdempotencyStore) Complete(_ context.Context, key service.IdempotencyKey, paymentID string) error {
+func (s *fakeIdempotencyStore) Complete(ctx context.Context, key service.IdempotencyKey, paymentID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -131,7 +156,10 @@ func (s *fakeIdempotencyStore) Complete(_ context.Context, key service.Idempoten
 	return nil
 }
 
-func (s *fakeIdempotencyStore) Release(_ context.Context, key service.IdempotencyKey) error {
+func (s *fakeIdempotencyStore) Release(ctx context.Context, key service.IdempotencyKey) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -140,7 +140,9 @@ func TestProcessor_FinalStatuses(t *testing.T) {
 }
 
 // Пул остановили, пока запрос был у банка. Если банк успел ответить, его
-// ответ сохраняется: деньги могли уже списать.
+// ответ сохраняется: деньги могли уже списать. Итог пишется уже после
+// отмены ctx, а fakeRepo, как база, на отменённом ctx не пишет: если Process
+// сохранит итог без context.WithoutCancel, платёж застрянет в processing.
 func TestProcessor_ShutdownWhileWaitingForBank(t *testing.T) {
 	tests := []struct {
 		name       string
