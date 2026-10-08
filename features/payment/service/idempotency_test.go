@@ -10,7 +10,7 @@ import (
 
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 func command(key string, amount int64) service.CreatePaymentCommand {

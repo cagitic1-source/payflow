@@ -9,7 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // CreatePayment обрабатывает POST /v1/payments: создаёт платёж и отвечает 202

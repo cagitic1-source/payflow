@@ -8,7 +8,7 @@ import (
 
 	paymentservice "github.com/cagitic1-source/payflow/features/payment/service"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // Проверка на этапе компиляции: Fake реализует paymentservice.Acquirer.
@@ -66,7 +66,7 @@ func (f *Fake) Authorize(ctx context.Context, _ paymentdomain.Payment) (payments
 	r := f.outcome()
 	switch {
 	case r < f.cfg.ErrorRate:
-		return paymentservice.Decision{}, paymenterrors.ErrUnavailable
+		return paymentservice.Decision{}, paymenterrors.ErrAcquirerUnavailable
 	case r < f.cfg.ErrorRate+f.cfg.DeclineRate:
 		return paymentservice.Decision{Reason: declineReasons[int(f.outcome()*float64(len(declineReasons)))]}, nil
 	default:

@@ -9,7 +9,7 @@ import (
 
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 

@@ -21,7 +21,7 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/middleware"
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 func newRouter() http.Handler {

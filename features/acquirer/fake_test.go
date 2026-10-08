@@ -8,7 +8,7 @@ import (
 	"time"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // sequence возвращает заданные числа по очереди - детерминированная «случайность».
@@ -31,7 +31,7 @@ func TestFake_Outcomes(t *testing.T) {
 		wantReason   string
 		wantErr      error
 	}{
-		{name: "error", random: []float64{0.01}, wantErr: paymenterrors.ErrUnavailable},
+		{name: "error", random: []float64{0.01}, wantErr: paymenterrors.ErrAcquirerUnavailable},
 		{name: "decline", random: []float64{0.05, 0.0}, wantReason: "insufficient_funds"},
 		{name: "decline other reason", random: []float64{0.05, 0.99}, wantReason: "suspected_fraud"},
 		{name: "approve", random: []float64{0.5}, wantApproved: true},
@@ -89,7 +89,7 @@ func TestFake_ConcurrentUse(t *testing.T) {
 			d, err := f.Authorize(context.Background(), paymentdomain.Payment{})
 			switch {
 			case err != nil:
-				if !errors.Is(err, paymenterrors.ErrUnavailable) {
+				if !errors.Is(err, paymenterrors.ErrAcquirerUnavailable) {
 					t.Errorf("unexpected error: %v", err)
 				}
 			case d.Approved && d.Reason != "":

@@ -8,7 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // CreatePayment создаёт платёж ровно один раз для каждого ключа идемпотентности.

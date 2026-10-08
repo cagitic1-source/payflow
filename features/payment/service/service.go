@@ -87,7 +87,7 @@ type Decision struct {
 
 // Acquirer авторизует платёж у банка-эквайера.
 // Отказ банка - это Decision с Approved == false и причиной.
-// Ошибка - банк не ответил: paymenterrors.ErrUnavailable или ошибка ctx.
+// Ошибка - банк не ответил: paymenterrors.ErrAcquirerUnavailable или ошибка ctx.
 type Acquirer interface {
 	Authorize(ctx context.Context, p paymentdomain.Payment) (Decision, error)
 }

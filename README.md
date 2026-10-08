@@ -238,7 +238,7 @@ internal/
   app/http/v1/router/         маршруты API v1
   app/http/v1/server/         HTTP-сервер с таймаутами и корректной остановкой
   core/domain/payment/        модель платежа, проверки, статусы и переходы
-  core/errors/payment_errors/ доменные ошибки
+  core/errors/paymenterrors/  доменные ошибки
   core/requestctx/            request id и логгер в context
   workerpool/                 пул воркеров с ограниченной очередью
 api/payments.http             примеры запросов

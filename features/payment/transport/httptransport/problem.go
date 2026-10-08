@@ -7,7 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 	"github.com/cagitic1-source/payflow/internal/core/requestctx"
 )
 

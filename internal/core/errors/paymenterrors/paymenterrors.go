@@ -6,16 +6,20 @@ import (
 	"fmt"
 )
 
-// Ошибки платёжного домена. Все ошибки валидации оборачивают ErrValidation,
+// Ошибки валидации платежа. Все они оборачивают ErrValidation,
 // поэтому errors.Is(err, ErrValidation) отличает их от остальных.
 var (
 	ErrValidation          = errors.New("validation failed")
-	ErrNotFound            = errors.New("payment not found")
 	ErrEmptyPaymentID      = fmt.Errorf("%w: payment id is empty", ErrValidation)
 	ErrEmptyMerchantID     = fmt.Errorf("%w: merchant id is empty", ErrValidation)
 	ErrInvalidAmount       = fmt.Errorf("%w: amount must be positive", ErrValidation)
 	ErrEmptyCurrency       = fmt.Errorf("%w: currency is empty", ErrValidation)
 	ErrUnsupportedCurrency = fmt.Errorf("%w: currency is not supported", ErrValidation)
+)
+
+var (
+	// ErrNotFound - платежа с таким id нет.
+	ErrNotFound = errors.New("payment not found")
 )
 
 var (
@@ -42,6 +46,6 @@ var (
 )
 
 var (
-	// ErrUnavailable - эквайер не ответил из-за технического сбоя.
-	ErrUnavailable = errors.New("acquirer unavailable")
+	// ErrAcquirerUnavailable - эквайер не ответил из-за технического сбоя.
+	ErrAcquirerUnavailable = errors.New("acquirer unavailable")
 )

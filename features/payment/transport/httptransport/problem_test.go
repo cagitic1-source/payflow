@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 func TestProblemFromError(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	paymentdomain "github.com/cagitic1-source/payflow/internal/core/domain/payment"
-	paymenterrors "github.com/cagitic1-source/payflow/internal/core/errors/payment_errors"
+	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
 // Get возвращает платёж по id. Если его нет - ошибку, оборачивающую
