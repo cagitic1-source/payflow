@@ -1,0 +1,13 @@
+# Всё, что не нужно для go build, в контекст сборки не уходит: так он меньше,
+# кеш слоя COPY . . не сбивается от посторонних файлов, и в образ не утекает
+# лишнее. В отличие от .gitignore, шаблоны считаются от корня контекста.
+.git
+.github
+.vscode
+.idea
+*.out
+/bin
+/payment-api
+Dockerfile
+.dockerignore
+docker-compose.yml
