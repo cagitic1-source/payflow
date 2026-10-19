@@ -11,6 +11,7 @@ import (
 // config - настройки запуска. Читаются из переменных окружения:
 //
 //	PAYFLOW_ADDR                 адрес сервера, по умолчанию ":8080"
+//	PAYFLOW_METRICS_ADDR         адрес сервера метрик, по умолчанию ":8081"
 //	PAYFLOW_READ_HEADER_TIMEOUT  server.Config.ReadHeaderTimeout
 //	PAYFLOW_READ_TIMEOUT         server.Config.ReadTimeout
 //	PAYFLOW_WRITE_TIMEOUT        server.Config.WriteTimeout
@@ -20,19 +21,26 @@ import (
 // Таймауты задаются в формате time.ParseDuration ("10s", "1m"). Незаданная
 // или пустая переменная - значение по умолчанию из server.DefaultConfig.
 type config struct {
-	addr   string
-	server server.Config
+	addr        string
+	metricsAddr string
+	server      server.Config
 }
 
 func loadConfig() (config, error) {
 	c := config{
-		addr:   ":8080",
-		server: server.DefaultConfig(),
+		addr:        ":8080",
+		metricsAddr: ":8081",
+		server:      server.DefaultConfig(),
 	}
+
 	// Укладываемся в бюджет остановки, см. httpShutdownTimeout в main.go.
 	c.server.ShutdownTimeout = httpShutdownTimeout
 	if v := os.Getenv("PAYFLOW_ADDR"); v != "" {
 		c.addr = v
+	}
+
+	if v := os.Getenv("PAYFLOW_METRICS_ADDR"); v != "" {
+		c.metricsAddr = v
 	}
 
 	timeouts := []struct {
