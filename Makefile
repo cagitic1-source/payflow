@@ -16,3 +16,15 @@ fmt:
  
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) -t $(IMAGE):$(VERSION) .
+ 
+# Стенд docker compose: payflow + Prometheus.
+up:
+	VERSION=$(VERSION) docker compose up --build -d
+ 
+down:
+	docker compose down
+ 
+# Проверка prometheus.yml тем же promtool, что лежит в образе Prometheus.
+prom-check:
+	docker compose run --rm --no-deps --entrypoint promtool prometheus check config /etc/prometheus/prometheus.yml
+ 
