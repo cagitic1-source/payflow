@@ -147,6 +147,13 @@ func TestAPI(t *testing.T) {
 			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
 		},
 		{
+			// Второй объект без полей разбирается в struct{} без ошибки:
+			// это ветка err == nil в decodeBody, а не ошибка разбора.
+			name: "create: empty object after JSON object", method: http.MethodPost, path: "/v1/payments",
+			body: validBody + "{}", headers: withKey,
+			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+		},
+		{
 			name: "create: validation error from service", method: http.MethodPost, path: "/v1/payments",
 			body: validBody, headers: withKey, svcErr: fmt.Errorf("create payment: %w", paymenterrors.ErrInvalidAmount),
 			wantStatus: http.StatusUnprocessableEntity, wantType: "invalid-amount", wantServiceCall: true,
