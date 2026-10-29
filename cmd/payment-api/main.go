@@ -32,8 +32,8 @@ const (
 	workers         = 20
 	queueCapacity   = 100
 	acquirerTimeout = 5 * time.Second
-	// Бюджет остановки: API (10 с) + пул (15 с) + метрики (2 с) < 30 с,
-	// которые Kubernetes даёт поду между SIGTERM и SIGKILL.
+	// Бюджет остановки: API (10 с) + пул (15 с) + служебный сервер (2 с)
+	// < 30 с, которые Kubernetes даёт поду между SIGTERM и SIGKILL.
 	httpShutdownTimeout    = 10 * time.Second
 	poolStopTimeout        = 15 * time.Second
 	metricsShutdownTimeout = 2 * time.Second
@@ -64,7 +64,9 @@ func run() error {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	// SIGINT (Ctrl+C) и SIGTERM (docker stop, Kubernetes) отменяют ctx.
+	// ctx отменяется по SIGINT (Ctrl+C), SIGTERM (docker stop, Kubernetes)
+	// или при сбое одного из серверов. Почему именно, скажет context.Cause:
+	// NotifyContext кладёт туда сигнал, серверы - свою ошибку.
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancelCause(sigCtx)
@@ -84,9 +86,8 @@ func run() error {
 	var lc net.ListenConfig
 	apiLn, err := lc.Listen(ctx, "tcp", cfg.addr)
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("listen api: %w", err)
 	}
-
 	metricsLn, err := lc.Listen(ctx, "tcp", cfg.metricsAddr)
 	if err != nil {
 		_ = apiLn.Close()
