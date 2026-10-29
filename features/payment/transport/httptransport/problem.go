@@ -90,6 +90,12 @@ var problemSpecs = []problemSpec{
 		slug: "payment-not-found", title: "Payment not found",
 		detail: "payment with the given id does not exist",
 	},
+	// --- 413 ---
+	{
+		err: ErrBodyTooLarge, status: http.StatusRequestEntityTooLarge,
+		slug: "body-too-large", title: "Body too large",
+		detail: "request body exceeds the size limit",
+	},
 	// --- 400 ---
 	{
 		err: ErrMalformedRequest, status: http.StatusBadRequest,

@@ -1,0 +1,41 @@
+# Локальный стенд: payflow и Prometheus, который собирает его метрики.
+# make up - собрать и запустить, make down - остановить.
+name: payflow
+ 
+services:
+  payflow:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    image: payflow:${VERSION:-dev}
+    environment:
+      PAYFLOW_ADDR: ":8080"
+      PAYFLOW_METRICS_ADDR: ":8081"
+    ports:
+      # Наружу только API. Служебный 8081 не публикуем: до него достаёт
+      # только Prometheus из той же сети compose.
+      - "8080:8080"
+    # Остановка payflow укладывается в 27 с (API 10 + пул 15 + метрики 2).
+    # По умолчанию Docker ждёт 10 с и шлёт SIGKILL.
+    stop_grace_period: 30s
+ 
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.15.0
+    # command заменяет весь CMD образа, поэтому --config.file и
+    # --storage.tsdb.path повторяем явно.
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      # POST /-/reload перечитывает конфиг без рестарта.
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Именованный том: данные переживают пересоздание контейнера.
+      - prometheus-data:/prometheus
+ 
+volumes:
+  prometheus-data:

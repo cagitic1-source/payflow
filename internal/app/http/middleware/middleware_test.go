@@ -123,3 +123,32 @@ func TestRecover_AbortHandlerPropagates(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 	t.Error("panic was swallowed")
 }
+
+// Ответ уже начат: Recover не дописывает 500 к обрывку, а обрывает
+// соединение и логирует, что ответ был начат.
+func TestRecover_PanicAfterResponseStarted(t *testing.T) {
+	core, logs := observer.New(zap.ErrorLevel)
+	h := middleware.Recover(zap.New(core), http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("partial"))
+		panic("boom")
+	}))
+	rec := httptest.NewRecorder()
+
+	func() {
+		defer func() {
+			err, _ := recover().(error)
+			if !errors.Is(err, http.ErrAbortHandler) {
+				t.Errorf("want ErrAbortHandler, got %v", err)
+			}
+		}()
+		h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	}()
+
+	if rec.Body.String() != "partial" {
+		t.Errorf("body = %q, nothing must be appended", rec.Body.String())
+	}
+	entries := logs.All()
+	if len(entries) != 1 || entries[0].ContextMap()["response_started"] != true {
+		t.Errorf("want one log entry with response_started=true, got %+v", entries)
+	}
+}

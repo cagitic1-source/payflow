@@ -14,12 +14,13 @@ import (
 
 const idempotencyKeyHeader = "Idempotency-Key"
 
-// maxRequestBodyBytes - предел размера тела запроса. Тело больше - 400 malformed-request.
-const maxRequestBodyBytes = 1 << 20
-
 // ErrMalformedRequest - тело запроса не удалось разобрать: невалидный JSON,
 // неизвестные поля или лишние данные после объекта. Клиент получает 400.
 var ErrMalformedRequest = errors.New("malformed request")
+
+// ErrBodyTooLarge - тело запроса больше лимита, который ставит
+// middleware.BodyLimit. Клиент получает 413.
+var ErrBodyTooLarge = errors.New("request body too large")
 
 // IdempotentReplayedHeader ставится в ответ, если платёж создан раньше
 // и ответ - повтор первого.

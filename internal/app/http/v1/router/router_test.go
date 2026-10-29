@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -24,10 +25,20 @@ import (
 	"github.com/cagitic1-source/payflow/internal/core/errors/paymenterrors"
 )
 
+// newTestHTTPMetrics - HTTP-метрики на отдельном реестре: у каждого роутера
+// в тестах свой, повторной регистрации не бывает.
+func newTestHTTPMetrics() *middleware.HTTPMetrics {
+	m, err := middleware.NewHTTPMetrics(prometheus.NewRegistry())
+	if err != nil {
+		panic(err) // свежий реестр: ошибка здесь - баг в самом тесте
+	}
+	return m
+}
+
 func newRouter() http.Handler {
 	log := zap.NewNop()
 	svc := service.NewPaymentService(memory.NewPaymentRepository(), memory.NewIdempotencyStore(time.Hour), acceptQueue{}, zap.NewNop())
-	return router.New(log, httptransport.NewPaymentHandler(svc, log))
+	return router.New(log, newTestHTTPMetrics(), httptransport.NewPaymentHandler(svc, log))
 }
 
 func TestAPI(t *testing.T) {
@@ -68,7 +79,14 @@ func TestAPI(t *testing.T) {
 			name: "create: body too large", method: http.MethodPost, path: "/v1/payments",
 			headers:    withKey,
 			body:       `{"merchant_id":"` + strings.Repeat("a", 1<<20) + `","amount_minor":100,"currency":"RUB"}`,
-			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+			wantStatus: http.StatusRequestEntityTooLarge, wantType: "body-too-large",
+		},
+		{
+			// Объект целиком в лимите, а хвост после него - нет: это тоже 413, не 400.
+			name: "create: trailing data over limit", method: http.MethodPost, path: "/v1/payments",
+			headers:    withKey,
+			body:       validBody + `"` + strings.Repeat("a", 1<<20),
+			wantStatus: http.StatusRequestEntityTooLarge, wantType: "body-too-large",
 		},
 		{
 			name: "create: service overloaded", method: http.MethodPost, path: "/v1/payments",
@@ -166,7 +184,7 @@ func TestAPI(t *testing.T) {
 				err:      tt.svcErr,
 			}
 			log := zap.NewNop()
-			api := router.New(log, httptransport.NewPaymentHandler(svc, log))
+			api := router.New(log, newTestHTTPMetrics(), httptransport.NewPaymentHandler(svc, log))
 
 			req := httptest.NewRequestWithContext(t.Context(), tt.method, tt.path, strings.NewReader(tt.body))
 			for k, v := range tt.headers {
@@ -368,7 +386,7 @@ func TestAPI_ErrorLogsCarryRequestID(t *testing.T) {
 			// DebugLevel: иначе observer сам отбросит Info/Warn и уровень не проверится.
 			core, logs := observer.New(zap.DebugLevel)
 			log := zap.New(core)
-			api := router.New(log, httptransport.NewPaymentHandler(&fakePaymentService{err: tt.svcErr}, log))
+			api := router.New(log, newTestHTTPMetrics(), httptransport.NewPaymentHandler(&fakePaymentService{err: tt.svcErr}, log))
 
 			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/payments",
 				strings.NewReader(`{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`))
@@ -394,7 +412,7 @@ func TestAPI_CreateLogsPaymentID(t *testing.T) {
 	core, logs := observer.New(zap.DebugLevel)
 	log := zap.New(core)
 	svc := &fakePaymentService{payment: paymentdomain.Payment{ID: "pay-1", Status: paymentdomain.StatusPending}}
-	api := router.New(log, httptransport.NewPaymentHandler(svc, log))
+	api := router.New(log, newTestHTTPMetrics(), httptransport.NewPaymentHandler(svc, log))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/payments",
 		strings.NewReader(`{"merchant_id":"m-1","amount_minor":100,"currency":"RUB"}`))
@@ -409,5 +427,40 @@ func TestAPI_CreateLogsPaymentID(t *testing.T) {
 	ctx := entries[0].ContextMap()
 	if ctx["request_id"] != "req-123" || ctx["payment_id"] != "pay-1" {
 		t.Errorf("want request_id=req-123 and payment_id=pay-1, got %v", ctx)
+	}
+}
+
+// Метрики подключены и стоят внутри RequestID: снаружи r.Pattern не был бы
+// виден, и маршрут записался бы как unmatched.
+func TestRouter_RecordsHTTPMetrics(t *testing.T) {
+	reg := prometheus.NewPedanticRegistry()
+	m, err := middleware.NewHTTPMetrics(reg)
+	if err != nil {
+		t.Fatalf("new http metrics: %v", err)
+	}
+	log := zap.NewNop()
+	api := router.New(log, m, httptransport.NewPaymentHandler(&fakePaymentService{}, log))
+
+	api.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/payments/p1", nil))
+
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var routes []string
+	for _, f := range families {
+		if f.GetName() != "payflow_http_request_duration_seconds" {
+			continue
+		}
+		for _, metric := range f.GetMetric() {
+			for _, l := range metric.GetLabel() {
+				if l.GetName() == "route" {
+					routes = append(routes, l.GetValue())
+				}
+			}
+		}
+	}
+	if len(routes) != 1 || routes[0] != "/v1/payments/{id}" {
+		t.Errorf("want one series with route=/v1/payments/{id}, got routes %v", routes)
 	}
 }

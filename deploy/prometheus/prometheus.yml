@@ -1,0 +1,22 @@
+# Prometheus для локального стенда (docker compose).
+
+global:
+  # Как часто забирать метрики. В проде обычно 15-30s; 5s - чтобы на учебном
+  # стенде графики откликались быстро.
+  scrape_interval: 5s
+  # Сколько ждать ответа: не больше scrape_interval и больше таймаута
+  # обработчика /metrics в payflow (3 с). Тогда при медленном сборе payflow
+  # сам ответит 503 с причиной, а не Prometheus оборвёт соединение.
+  scrape_timeout: 4s
+
+scrape_configs:
+  # payflow: служебный порт, доступный только внутри сети compose.
+  # Имя payflow - имя сервиса в docker-compose.yml, его резолвит DNS Docker.
+  - job_name: payflow
+    static_configs:
+      - targets: ["payflow:8081"]
+  # Prometheus собирает и свои метрики: сколько серий хранит, сколько
+  # длится скрейп. Мониторинг тоже нужно мониторить.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
