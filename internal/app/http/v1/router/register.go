@@ -10,8 +10,12 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/middleware"
 )
 
+// maxRequestBodyBytes - предел тела любого запроса к API. Тело платежа -
+// около сотни байт, 1 MiB - большой запас и прежний лимит из README.
+const maxRequestBodyBytes = 1 << 20
+
 // New собирает HTTP-обработчик API v1: маршруты /healthz и /v1/payments,
-// обёрнутые в middleware RequestID, метрики и Recover.
+// обёрнутые в middleware BodyLimit, RequestID, метрики и Recover.
 func New(log *zap.Logger, httpMetrics *middleware.HTTPMetrics, paymentHandler *httptransport.PaymentHandler) http.Handler {
 	mux := http.NewServeMux()
 
@@ -21,6 +25,7 @@ func New(log *zap.Logger, httpMetrics *middleware.HTTPMetrics, paymentHandler *h
 	h := middleware.Recover(log, mux)
 	h = httpMetrics.Middleware(h)
 	h = middleware.RequestID(log, h)
+	h = middleware.BodyLimit(maxRequestBodyBytes, h)
 	return h
 }
 
