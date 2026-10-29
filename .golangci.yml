@@ -7,6 +7,7 @@ linters:
   default: standard
   enable:
     - errorlint
+    - promlinter
     - revive
     - bodyclose
     - noctx
