@@ -79,7 +79,14 @@ func TestAPI(t *testing.T) {
 			name: "create: body too large", method: http.MethodPost, path: "/v1/payments",
 			headers:    withKey,
 			body:       `{"merchant_id":"` + strings.Repeat("a", 1<<20) + `","amount_minor":100,"currency":"RUB"}`,
-			wantStatus: http.StatusBadRequest, wantType: "malformed-request",
+			wantStatus: http.StatusRequestEntityTooLarge, wantType: "body-too-large",
+		},
+		{
+			// Объект целиком в лимите, а хвост после него - нет: это тоже 413, не 400.
+			name: "create: trailing data over limit", method: http.MethodPost, path: "/v1/payments",
+			headers:    withKey,
+			body:       validBody + `"` + strings.Repeat("a", 1<<20),
+			wantStatus: http.StatusRequestEntityTooLarge, wantType: "body-too-large",
 		},
 		{
 			name: "create: service overloaded", method: http.MethodPost, path: "/v1/payments",

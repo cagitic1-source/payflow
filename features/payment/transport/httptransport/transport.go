@@ -18,6 +18,10 @@ const idempotencyKeyHeader = "Idempotency-Key"
 // неизвестные поля или лишние данные после объекта. Клиент получает 400.
 var ErrMalformedRequest = errors.New("malformed request")
 
+// ErrBodyTooLarge - тело запроса больше лимита, который ставит
+// middleware.BodyLimit. Клиент получает 413.
+var ErrBodyTooLarge = errors.New("request body too large")
+
 // IdempotentReplayedHeader ставится в ответ, если платёж создан раньше
 // и ответ - повтор первого.
 const IdempotentReplayedHeader = "Idempotent-Replayed"

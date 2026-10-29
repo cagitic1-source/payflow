@@ -12,7 +12,7 @@ import (
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 )
 
-// Тело сверх лимита: сервер отвечает 400 и закрывает соединение
+// Тело сверх лимита: сервер отвечает 413 и закрывает соединение
 // (Connection: close). Закрывает он его, только если http.MaxBytesReader
 // получил исходный ResponseWriter, то есть BodyLimit стоит в цепочке первым.
 // Рекордер этого не покажет, поэтому нужен настоящий сервер.
@@ -49,8 +49,8 @@ func TestAPI_BodyOverLimitClosesConnection(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	if resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Errorf("status: got %d, want %d", resp.StatusCode, http.StatusRequestEntityTooLarge)
 	}
 	if !resp.Close {
 		t.Error("server must close the connection after the body limit is hit (Connection: close)")

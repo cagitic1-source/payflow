@@ -90,8 +90,8 @@ PAYFLOW_ADDR=:9090 PAYFLOW_SHUTDOWN_TIMEOUT=5s make run
 | `amount_minor` | int64  | сумма в минимальных единицах (копейки, центы), > 0 |
 | `currency`     | string | `RUB`, `USD` или `EUR`, только заглавными       |
 
-Неизвестные поля, данные после JSON-объекта и тело больше 1 МБ считаются
-ошибкой (400).
+Неизвестные поля и данные после JSON-объекта считаются ошибкой (400), тело
+больше 1 МБ - `413`.
 
 Ответ `202 Accepted`: тело платежа и заголовок `Location` с его адресом.
 Платёж создаётся в статусе `pending` и встаёт в очередь на обработку, итоговый
@@ -215,10 +215,11 @@ pending -> processing -> approved
 
 | Статус | `type`                            | Когда                                     |
 |--------|-----------------------------------|-------------------------------------------|
-| 400    | `malformed-request`               | невалидный JSON, неизвестное поле, лишние данные, тело больше 1 МБ |
+| 400    | `malformed-request`               | невалидный JSON, неизвестное поле, лишние данные |
 | 400    | `missing-idempotency-key`         | нет `Idempotency-Key` или он длиннее 255  |
 | 404    | `payment-not-found`               | платежа с таким id нет                    |
 | 409    | `idempotency-request-in-progress` | запрос с этим ключом ещё выполняется      |
+| 413    | `body-too-large`                  | тело больше 1 МБ                          |
 | 422    | `empty-merchant-id`               | пустой `merchant_id`                      |
 | 422    | `invalid-amount`                  | `amount_minor` <= 0                       |
 | 422    | `empty-currency`                  | пустая `currency`                         |

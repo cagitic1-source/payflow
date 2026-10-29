@@ -26,6 +26,7 @@ func TestProblemFromError(t *testing.T) {
 		{"empty payment id", paymenterrors.ErrEmptyPaymentID, http.StatusUnprocessableEntity, problemTypeBase + "empty-payment-id", ""},
 		{"not found", paymenterrors.ErrNotFound, http.StatusNotFound, problemTypeBase + "payment-not-found", ""},
 		{"malformed request", fmt.Errorf("%w: unexpected EOF", ErrMalformedRequest), http.StatusBadRequest, problemTypeBase + "malformed-request", ""},
+		{"body too large", fmt.Errorf("%w: %w", ErrBodyTooLarge, &http.MaxBytesError{Limit: 1 << 20}), http.StatusRequestEntityTooLarge, problemTypeBase + "body-too-large", ""},
 		{"missing idempotency key", paymenterrors.ErrEmptyIdempotencyKey, http.StatusBadRequest, problemTypeBase + "missing-idempotency-key", ""},
 		{"idempotency key reused", paymenterrors.ErrIdempotencyKeyReused, http.StatusUnprocessableEntity, problemTypeBase + "idempotency-key-reused", ""},
 		{"idempotency in progress", fmt.Errorf("reserve idempotency key: %w", paymenterrors.ErrIdempotencyInProgress), http.StatusConflict, problemTypeBase + "idempotency-request-in-progress", ""},
