@@ -6,6 +6,20 @@ RFC 9457 (`application/problem+json`).
 
 Банк пока фейковый, а данные хранятся в памяти процесса и пропадают при перезапуске.
 
+## Стек
+
+| Что         | Чем                                                                  |
+|-------------|----------------------------------------------------------------------|
+| Язык        | Go 1.27                                                              |
+| HTTP        | стандартный `net/http`, маршруты через `http.ServeMux`               |
+| Логи        | [zap](https://github.com/uber-go/zap), структурированные JSON-логи с `request_id` |
+| Метрики     | [Prometheus](https://prometheus.io/): клиент `client_golang`, сервер Prometheus 3.15 на стенде |
+| Хранилище   | в памяти процесса                                                    |
+| Контейнеры  | Docker, многоэтапная сборка в образ distroless; Docker Compose для локального стенда |
+| Тесты       | стандартный `testing`, `testing/synctest` для кода с таймаутами и горутинами, `-race` |
+| Линтеры     | [golangci-lint](https://golangci-lint.run/) v2                       |
+| CI          | GitHub Actions                                                       |
+
 ## Быстрый старт
 
 Нужны Go 1.27.1+ и, для линтера, [golangci-lint](https://golangci-lint.run/) v2.14.0.
@@ -289,6 +303,12 @@ docker compose exec prometheus wget -qO- payflow:8081/metrics
 | `go_*`                      | рантайм Go: `go_goroutines`, `go_memstats_heap_alloc_bytes`, `go_gc_duration_seconds` |
 | `process_*`                 | процесс: `process_cpu_seconds_total`, `process_resident_memory_bytes`, `process_open_fds` |
 | `promhttp_metric_handler_*` | сам `/metrics`: скрейпы по коду ответа, текущие скрейпы, ошибки сбора |
+| `payflow_http_request_duration_seconds` | длительность запросов к API по `method`, `route` и `code`; `_count` даёт число запросов и долю ошибок |
+| `payflow_http_requests_in_flight` | запросы к API, которые обрабатываются прямо сейчас |
+
+`route` - шаблон маршрута, например `/v1/payments/{id}`, а не сам путь: id
+платежа в метку не попадает. Запрос без маршрута (404, 405) получает
+`route="unmatched"`, метод вне стандартного набора - `method="other"`.
 
 Версия попадает в бинарник при сборке через `-ldflags "-X main.version=..."`.
 `make up` и `make docker-build` берут её из `git describe --tags --always --dirty`:
@@ -301,7 +321,7 @@ docker compose exec prometheus wget -qO- payflow:8081/metrics
 не дольше 3 секунд. Если лимит превышен, сервер отвечает `503`, и такой ответ
 учитывается в `promhttp_metric_handler_requests_total{code="503"}`.
 
-Метрик HTTP-запросов, платежей и очереди пока нет.
+Метрик платежей и очереди пока нет.
 
 ### Проверка
 
@@ -318,6 +338,13 @@ docker compose exec prometheus wget -qO- payflow:8081/metrics
 
 - `payflow_build_info` должен вернуть одну серию, в метке `version` которой
   записана запущенная сборка.
+
+- `sum by (route, code) (rate(payflow_http_request_duration_seconds_count[1m]))` -
+  запросы в секунду по маршрутам и кодам ответа. Пока API никто не вызывает,
+  ответ пустой: отправьте несколько запросов из `api/payments.http`.
+
+- `histogram_quantile(0.99, sum by (le) (rate(payflow_http_request_duration_seconds_bucket[5m])))` -
+  p99 времени ответа API.
 
 Те же запросы можно выполнить через HTTP API:
 
@@ -337,8 +364,8 @@ features/
   payment/transport/httptransport/
                               HTTP-обработчики, DTO, таблица ошибок -> ответы
 internal/
-  app/http/middleware/        RequestID и Recover (паника -> 500)
-  app/http/v1/router/         маршруты API v1
+  app/http/middleware/        BodyLimit, RequestID, HTTPMetrics, Recover, обёртка ResponseWriter
+  app/http/v1/router/         маршруты API v1 и цепочка middleware
   app/http/v1/server/         HTTP-сервер с таймаутами и корректной остановкой
   core/domain/payment/        модель платежа, проверки, статусы и переходы
   core/errors/paymenterrors/  доменные ошибки
@@ -382,4 +409,3 @@ CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) на каждый pull
   переменные окружения.
 - Аутентификация отсутствует сознательно: `merchant_id` берётся из тела запроса, а платёж
   по id может получить любой клиент.
-
