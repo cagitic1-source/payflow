@@ -11,14 +11,17 @@ import (
 )
 
 // New собирает HTTP-обработчик API v1: маршруты /healthz и /v1/payments,
-// обёрнутые в middleware RequestID и Recover.
-func New(log *zap.Logger, paymentHandler *httptransport.PaymentHandler) http.Handler {
+// обёрнутые в middleware RequestID, метрики и Recover.
+func New(log *zap.Logger, httpMetrics *middleware.HTTPMetrics, paymentHandler *httptransport.PaymentHandler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", healthzHandler)
 	registerPayments(mux, paymentHandler)
 
-	return middleware.RequestID(log, middleware.Recover(log, mux))
+	h := middleware.Recover(log, mux)
+	h = httpMetrics.Middleware(h)
+	h = middleware.RequestID(log, h)
+	return h
 }
 
 func registerPayments(mux *http.ServeMux, p *httptransport.PaymentHandler) {

@@ -85,7 +85,7 @@ func newPipeline(bank service.Acquirer, workers, capacity int) pipeline {
 	pool := workerpool.New(workers, capacity, processor.Process, log)
 	svc := service.NewPaymentService(repo, memory.NewIdempotencyStore(time.Hour), pool, log)
 	return pipeline{
-		api:  router.New(log, httptransport.NewPaymentHandler(svc, log)),
+		api:  router.New(log, newTestHTTPMetrics(), httptransport.NewPaymentHandler(svc, log)),
 		pool: pool,
 	}
 }

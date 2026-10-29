@@ -18,6 +18,7 @@ import (
 // это штатный способ оборвать ответ.
 func Recover(log *zap.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rw := newResponseWrite(w)
 		defer func() {
 			rec := recover()
 			if rec == nil {
@@ -37,12 +38,16 @@ func Recover(log *zap.Logger, next http.Handler) http.Handler {
 				zap.Any("error", rec),
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
+				zap.Bool("response_started", rw.wroteHeader),
 				zap.Stack("stack"),
 			)
+			if rw.wroteHeader {
+				panic(http.ErrAbortHandler)
+			}
 			writeInternalError(w, r)
 		}()
 
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(rw, r)
 	})
 }
 

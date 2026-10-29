@@ -18,6 +18,7 @@ import (
 	"github.com/cagitic1-source/payflow/features/payment/memory"
 	"github.com/cagitic1-source/payflow/features/payment/service"
 	"github.com/cagitic1-source/payflow/features/payment/transport/httptransport"
+	"github.com/cagitic1-source/payflow/internal/app/http/middleware"
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/router"
 	"github.com/cagitic1-source/payflow/internal/app/http/v1/server"
 	"github.com/cagitic1-source/payflow/internal/metrics"
@@ -79,6 +80,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("init metrics: %w", err)
 	}
+	httpMetrics, err := middleware.NewHTTPMetrics(reg)
+	if err != nil {
+		return fmt.Errorf("init http metrics: %w", err)
+	}
 
 	// Порты открываем первыми: если какой-то занят, выходим до запуска
 	// горутин. Адрес в ошибку добавлять не нужно, его уже пишет net:
@@ -104,7 +109,7 @@ func run() error {
 	go idempotency.RunCleanup(ctx, idempotencyCleanupInterval)
 
 	svc := service.NewPaymentService(repo, idempotency, pool, logger)
-	handler := router.New(logger, httptransport.NewPaymentHandler(svc, logger))
+	handler := router.New(logger, httpMetrics, httptransport.NewPaymentHandler(svc, logger))
 
 	// У служебного сервера свой контекст, а не ctx: он должен пережить
 	// остановку API и пула, чтобы Prometheus видел, как дорабатывается
