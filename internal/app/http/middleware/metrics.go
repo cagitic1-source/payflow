@@ -39,7 +39,7 @@ func NewHTTPMetrics(reg prometheus.Registerer) (*HTTPMetrics, error) {
 			Namespace: "payflow",
 			Subsystem: "http",
 			Name:      "requests_in_flight",
-			Help:      "Number of HTTP requests currently veing served.",
+			Help:      "Number of HTTP requests currently being served.",
 		}),
 	}
 	for _, c := range []prometheus.Collector{

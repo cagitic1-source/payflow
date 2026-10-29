@@ -44,7 +44,7 @@ func Recover(log *zap.Logger, next http.Handler) http.Handler {
 			if rw.wroteHeader {
 				panic(http.ErrAbortHandler)
 			}
-			writeInternalError(w, r)
+			writeInternalError(rw, r)
 		}()
 
 		next.ServeHTTP(rw, r)
