@@ -66,7 +66,7 @@ func (m *HTTPMetrics) Middleware(next http.Handler) http.Handler {
 		func(w http.ResponseWriter, r *http.Request) {
 			m.inFlight.Inc()
 			start := time.Now()
-			rw := newResponseWrite(w)
+			rw := newResponseWriter(w)
 			comleted := false
 
 			defer func() {
